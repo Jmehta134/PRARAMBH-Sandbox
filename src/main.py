@@ -15,6 +15,7 @@ from char_display import CharDisplayView
 from register_monitor import RegisterMonitorView
 from programmable_keypad import ProgrammableKeypadView
 from slider import SliderADCView
+from gauge import GaugeADCView
 
 from console_log import ConsoleLogView
 
@@ -164,7 +165,8 @@ class SandboxPane(QFrame):
             "DIP & Hex I/O",         # 4
             "Programmable Keypad",   # 5
             "Slider ADC In",         # 6
-            "Console Log"            # 7
+            "Gauge ADC Out",         # 7
+            "Console Log"            # 8
         ])
         self.tool_selector.currentIndexChanged.connect(self.switch_tool)
         
@@ -208,6 +210,10 @@ class SandboxPane(QFrame):
         # Slider pane
         self.slider_adc = SliderADCView()
         self.stack.addWidget(self.slider_adc)
+
+        # Slider pane
+        self.gauge_adc = GaugeADCView()
+        self.stack.addWidget(self.gauge_adc)
 
         # Console Log
         self.console_log = ConsoleLogView()
@@ -346,7 +352,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.right_pane = SandboxPane()
         
         # --- INITIAL CONFIGURATION ON STARTUP ---
-        self.left_pane.tool_selector.setCurrentIndex(6)  # Console Log
+        self.left_pane.tool_selector.setCurrentIndex(7)  # Console Log
         self.right_pane.tool_selector.setCurrentIndex(0) # Empty Workspace
         
         self.splitter.addWidget(self.left_pane)
@@ -384,6 +390,8 @@ class UnifiedSandboxIDE(QMainWindow):
         self.left_pane.slider_adc.set_available_inputs(parsed['inputs'])
         self.right_pane.slider_adc.set_available_inputs(parsed['inputs'])
 
+        self.left_pane.gauge_adc.set_available_signals(parsed['internals'] + parsed['outputs'])
+
     def sync_hardware_to_ui(self, state_dict):
         """Routes live simulation dictionary to active UI widgets."""
         if 'out_monitor' in state_dict:
@@ -405,6 +413,8 @@ class UnifiedSandboxIDE(QMainWindow):
         # Update OLED Displays <-- Added routing here
         self.left_pane.char_display.update_values(state_dict)
         self.right_pane.char_display.update_values(state_dict)
+
+        self.left_pane.gauge_adc.update_values(state_dict)
 
     def toggle_clock_mode(self, is_auto):
         if is_auto:
