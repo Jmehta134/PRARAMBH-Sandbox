@@ -11,9 +11,11 @@ from PyQt5.QtGui import QFont
 # Import all module views
 from dip_hex_io import DipHexIOView
 from pixel_matrix import PixelMatrixView
-from fsm_visualizer import FSMVisualizerView
+from char_display import CharDisplayView
 from register_monitor import RegisterMonitorView
 from programmable_keypad import ProgrammableKeypadView
+from slider import SliderADCView
+
 from console_log import ConsoleLogView
 
 # Import the Dynamic Simulation Backend Engine
@@ -156,12 +158,13 @@ class SandboxPane(QFrame):
         self.tool_selector = QComboBox()
         self.tool_selector.addItems([
             "Empty Workspace",       # 0
-            "Pixel Matrix View",     # 1
-            "FSM Visualizer",        # 2
+            "Pixel Matrix",          # 1
+            "Character Display",     # 2
             "Register Monitor",      # 3
             "DIP & Hex I/O",         # 4
             "Programmable Keypad",   # 5
-            "Console Log"            # 6
+            "Slider ADC In",         # 6
+            "Console Log"            # 7
         ])
         self.tool_selector.currentIndexChanged.connect(self.switch_tool)
         
@@ -186,9 +189,9 @@ class SandboxPane(QFrame):
         self.pixel_matrix = PixelMatrixView()
         self.stack.addWidget(self.pixel_matrix)
         
-        # 2: FSM Visualizer
-        self.fsm_visualizer = FSMVisualizerView()
-        self.stack.addWidget(self.fsm_visualizer)
+        # 2: 16x3 Display
+        self.char_display = CharDisplayView()
+        self.stack.addWidget(self.char_display)
         
         # 3: Register Monitor
         self.register_monitor = RegisterMonitorView()
@@ -202,7 +205,11 @@ class SandboxPane(QFrame):
         self.keypad = ProgrammableKeypadView()
         self.stack.addWidget(self.keypad)
 
-        # 6: Console Log
+        # Slider pane
+        self.slider_adc = SliderADCView()
+        self.stack.addWidget(self.slider_adc)
+
+        # Console Log
         self.console_log = ConsoleLogView()
         self.stack.addWidget(self.console_log)
 
@@ -250,6 +257,9 @@ class UnifiedSandboxIDE(QMainWindow):
         self.left_pane.dip_io.byte_b.value_changed.connect(lambda v: self.engine.send_command('port_b', v))
         self.right_pane.dip_io.byte_a.value_changed.connect(lambda v: self.engine.send_command('port_a', v))
         self.right_pane.dip_io.byte_b.value_changed.connect(lambda v: self.engine.send_command('port_b', v))
+
+        self.left_pane.slider_adc.adc_updated.connect(self.engine.send_command)
+        self.right_pane.slider_adc.adc_updated.connect(self.engine.send_command)
         
         # Generic bindings (The keypad dynamically targets specific ports)
         self.left_pane.keypad.keypad_triggered.connect(self.engine.send_command)
@@ -366,6 +376,13 @@ class UnifiedSandboxIDE(QMainWindow):
         # Supply internal registers to Register Monitors
         self.left_pane.register_monitor.set_available_signals(parsed['internals'])
         self.right_pane.register_monitor.set_available_signals(parsed['internals'])
+        
+        # Supply data to Displays
+        self.left_pane.char_display.set_available_signals(parsed['internals'] + parsed['outputs'])
+        self.right_pane.char_display.set_available_signals(parsed['internals'] + parsed['outputs'])
+
+        self.left_pane.slider_adc.set_available_inputs(parsed['inputs'])
+        self.right_pane.slider_adc.set_available_inputs(parsed['inputs'])
 
     def sync_hardware_to_ui(self, state_dict):
         """Routes live simulation dictionary to active UI widgets."""
@@ -384,6 +401,10 @@ class UnifiedSandboxIDE(QMainWindow):
         # Update dynamic dropdown register rows
         self.left_pane.register_monitor.sync_data(state_dict)
         self.right_pane.register_monitor.sync_data(state_dict)
+        
+        # Update OLED Displays <-- Added routing here
+        self.left_pane.char_display.update_values(state_dict)
+        self.right_pane.char_display.update_values(state_dict)
 
     def toggle_clock_mode(self, is_auto):
         if is_auto:
@@ -397,7 +418,6 @@ class UnifiedSandboxIDE(QMainWindow):
             interval = freq_map.get(self.combo_freq.currentIndex(), 1000)
             self.clock_timer.start(interval)
             
-            # Look here! No .emit() !
             self.left_pane.console_log.log_message("Clock Engine switched to AUTO mode.", "INFO")
         else:
             self.btn_lever.setText("MANUAL")
@@ -407,7 +427,6 @@ class UnifiedSandboxIDE(QMainWindow):
             self.combo_freq.setStyleSheet("color: #AAAAAA; border-color: #CCCCCC; background-color: #F0F0F0;")
             self.clock_timer.stop()
             
-            # Look here! No .emit() !
             self.left_pane.console_log.log_message("Clock Engine switched to MANUAL mode.", "INFO")
 
     def update_clock_frequency(self):

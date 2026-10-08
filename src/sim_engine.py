@@ -50,10 +50,10 @@ class SimulationEngine(QObject):
             if inp in ['clk', 'rst']:
                 tb += f"    reg {inp} = 0;\n"
             else:
-                tb += f"    reg [255:0] {inp} = 0;\n"
+                tb += f"    reg [511:0] {inp} = 0;\n"
             
         for out in parsed['outputs']:
-            tb += f"    wire [255:0] {out};\n"
+            tb += f"    wire [511:0] {out};\n"
             
         tb += f"\n    {parsed['module_name']} dut (\n"
         ports = [f".{p}({p})" for p in parsed['inputs'] + parsed['outputs']]
