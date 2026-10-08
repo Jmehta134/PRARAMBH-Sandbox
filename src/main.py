@@ -16,7 +16,7 @@ from register_monitor import RegisterMonitorView
 from programmable_keypad import ProgrammableKeypadView
 from slider import SliderADCView
 from gauge import GaugeADCView
-
+from mouse_dir import MouseDirectionView
 from console_log import ConsoleLogView
 
 # Import the Dynamic Simulation Backend Engine
@@ -166,7 +166,8 @@ class SandboxPane(QFrame):
             "Programmable Keypad",   # 5
             "Slider ADC In",         # 6
             "Gauge ADC Out",         # 7
-            "Console Log"            # 8
+            "Mouse dir In",          # 8
+            "Console Log"            # 9
         ])
         self.tool_selector.currentIndexChanged.connect(self.switch_tool)
         
@@ -211,9 +212,13 @@ class SandboxPane(QFrame):
         self.slider_adc = SliderADCView()
         self.stack.addWidget(self.slider_adc)
 
-        # Slider pane
+        # Gauge pane
         self.gauge_adc = GaugeADCView()
         self.stack.addWidget(self.gauge_adc)
+
+        # Mouse dir pane
+        self.mouse_sensor = MouseDirectionView()
+        self.stack.addWidget(self.mouse_sensor)
 
         # Console Log
         self.console_log = ConsoleLogView()
@@ -270,6 +275,9 @@ class UnifiedSandboxIDE(QMainWindow):
         # Generic bindings (The keypad dynamically targets specific ports)
         self.left_pane.keypad.keypad_triggered.connect(self.engine.send_command)
         self.right_pane.keypad.keypad_triggered.connect(self.engine.send_command)
+
+        self.left_pane.mouse_sensor.mouse_updated.connect(self.engine.send_command)
+        self.right_pane.mouse_sensor.mouse_updated.connect(self.engine.send_command)
 
         # Global Control Controls
         self.btn_pulse.clicked.connect(lambda: self.engine.send_command('clk', 1))
@@ -352,7 +360,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.right_pane = SandboxPane()
         
         # --- INITIAL CONFIGURATION ON STARTUP ---
-        self.left_pane.tool_selector.setCurrentIndex(7)  # Console Log
+        self.left_pane.tool_selector.setCurrentIndex(2)  # Console Log
         self.right_pane.tool_selector.setCurrentIndex(0) # Empty Workspace
         
         self.splitter.addWidget(self.left_pane)

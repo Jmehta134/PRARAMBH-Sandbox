@@ -13,7 +13,7 @@ class VirtualLED(QFrame):
     """A custom styled widget representing a hardware status LED."""
     def __init__(self):
         super().__init__()
-        self.setFixedSize(22, 22)
+        self.setFixedSize(24, 24)
         self.set_state(False)
 
     def set_state(self, is_on):
@@ -22,7 +22,7 @@ class VirtualLED(QFrame):
                 QFrame {
                     background-color: #00E5FF;
                     border: 1px solid #00B3CC;
-                    border-radius: 11px;
+                    border-radius: 12px;
                 }
             """)
         else:
@@ -30,7 +30,7 @@ class VirtualLED(QFrame):
                 QFrame {
                     background-color: #D0D0D0;
                     border: 1px solid #A0A0A0;
-                    border-radius: 11px;
+                    border-radius: 12px;
                 }
             """)
 
@@ -99,106 +99,140 @@ class CharDisplayView(QWidget):
 
         self.layout.addSpacing(30)
 
-        # --- BOTTOM SECTION: The 3 Horizontal Wide Boxes ---
+        # --- BOTTOM SECTION: 4 Distinct Control Boxes ---
         regs_layout = QVBoxLayout()
-        regs_layout.setSpacing(15)
+        regs_layout.setSpacing(12)
 
         box_style = """
             QFrame {
                 border: 2px solid #CCCCCC;
-                border-radius: 6px;
-                background-color: #FAFAFA;
+                border-radius: 8px;
+                background-color: #E5E5E5;
+            }
+        """
+        lbl_style = "font-weight: 900; color: #555555; font-size: 12px; letter-spacing: 1px; border: none; background: transparent;"
+        badge_style = """
+            QLabel {
+                background-color: #FFFFFF; border: 2px solid #ADADAD;
+                padding: 6px 12px; border-radius: 6px; font-weight: bold;
+                font-size: 14px; color: #005A9E; font-family: monospace;
             }
         """
         lcd_style = """
             QLCDNumber {
                 background-color: #1E1E1E; color: #00FF00;
-                border: 2px inset #555555; border-radius: 4px;
+                border: 3px inset #555555; border-radius: 6px;
             }
         """
-        # Increased font sizes for readability
-        lbl_main_style = "font-weight: 900; color: #333333; font-size: 14px; letter-spacing: 1px; border: none; background: transparent;"
-        lbl_sub_style = "font-weight: bold; font-size: 14px; color: #555555; border: none; background: transparent;"
 
-        box_width = 440
-        box_height = 60
+        box_height = 70
 
-        # 1. Instruction Register Box
+        # 1. Instruction Register Box (Full Width Horizontal)
         box_ir = QFrame()
         box_ir.setStyleSheet(box_style)
-        box_ir.setFixedSize(box_width, box_height)
+        box_ir.setFixedHeight(box_height)
         ir_lay = QHBoxLayout(box_ir)
-        ir_lay.setContentsMargins(20, 5, 20, 5)
+        ir_lay.setContentsMargins(20, 10, 20, 10)
         
-        lbl_ir = QLabel("INSTRUCTION REGISTER (IR)")
-        lbl_ir.setStyleSheet(lbl_main_style)
+        lbl_ir = QLabel("INSTRUCTION REGISTER (IR):")
+        lbl_ir.setStyleSheet(lbl_style)
+        badge_ir = QLabel("lcd_ir [7:0]")
+        badge_ir.setStyleSheet(badge_style)
         self.lcd_ir = QLCDNumber()
         self.lcd_ir.setDigitCount(2)
         self.lcd_ir.setHexMode()
-        self.lcd_ir.setFixedSize(75, 40)
+        self.lcd_ir.setFixedSize(90, 45)
         self.lcd_ir.setStyleSheet(lcd_style)
+        self.lcd_ir.display("00")
         
         ir_lay.addWidget(lbl_ir)
         ir_lay.addStretch()
+        ir_lay.addWidget(badge_ir)
+        ir_lay.addSpacing(15)
         ir_lay.addWidget(self.lcd_ir)
 
-        # 2. Data Register Box
+        # 2. Data Register Box (Full Width Horizontal)
         box_dr = QFrame()
         box_dr.setStyleSheet(box_style)
-        box_dr.setFixedSize(box_width, box_height)
+        box_dr.setFixedHeight(box_height)
         dr_lay = QHBoxLayout(box_dr)
-        dr_lay.setContentsMargins(20, 5, 20, 5)
+        dr_lay.setContentsMargins(20, 10, 20, 10)
         
-        lbl_dr = QLabel("DATA REGISTER (DR)")
-        lbl_dr.setStyleSheet(lbl_main_style)
+        lbl_dr = QLabel("DATA REGISTER (DR):")
+        lbl_dr.setStyleSheet(lbl_style)
+        badge_dr = QLabel("lcd_dr [7:0]")
+        badge_dr.setStyleSheet(badge_style)
         self.lcd_dr = QLCDNumber()
         self.lcd_dr.setDigitCount(2)
         self.lcd_dr.setHexMode()
-        self.lcd_dr.setFixedSize(75, 40)
+        self.lcd_dr.setFixedSize(90, 45)
         self.lcd_dr.setStyleSheet(lcd_style)
+        self.lcd_dr.display("00")
         
         dr_lay.addWidget(lbl_dr)
         dr_lay.addStretch()
+        dr_lay.addWidget(badge_dr)
+        dr_lay.addSpacing(15)
         dr_lay.addWidget(self.lcd_dr)
 
-        # 3. Control Pins Box
-        box_ctrl = QFrame()
-        box_ctrl.setStyleSheet(box_style)
-        box_ctrl.setFixedSize(box_width, box_height)
-        ctrl_lay = QHBoxLayout(box_ctrl)
-        ctrl_lay.setContentsMargins(20, 5, 20, 5)
+        # 3 & 4. Control Pins Layout (Two Half-Width Boxes)
+        pins_lay = QHBoxLayout()
+        pins_lay.setSpacing(12)
+
+        # Box 3: RS Pin
+        box_rs = QFrame()
+        box_rs.setStyleSheet(box_style)
+        box_rs.setFixedHeight(box_height)
+        rs_lay = QHBoxLayout(box_rs)
+        rs_lay.setContentsMargins(15, 10, 20, 10)
         
-        lbl_ctrl = QLabel("CONTROL PINS")
-        lbl_ctrl.setStyleSheet(lbl_main_style)
-        
-        rs_lbl = QLabel("RS")
-        rs_lbl.setStyleSheet(lbl_sub_style)
+        lbl_rs = QLabel("RS PIN:")
+        lbl_rs.setStyleSheet(lbl_style)
+        badge_rs = QLabel("lcd_rs")
+        badge_rs.setStyleSheet(badge_style)
         self.led_rs = VirtualLED()
         
-        en_lbl = QLabel("EN")
-        en_lbl.setStyleSheet(lbl_sub_style)
+        rs_lay.addWidget(lbl_rs)
+        rs_lay.addStretch()
+        rs_lay.addWidget(badge_rs)
+        rs_lay.addSpacing(15)
+        rs_lay.addWidget(self.led_rs)
+
+        # Box 4: EN Pin
+        box_en = QFrame()
+        box_en.setStyleSheet(box_style)
+        box_en.setFixedHeight(box_height)
+        en_lay = QHBoxLayout(box_en)
+        en_lay.setContentsMargins(15, 10, 20, 10)
+        
+        lbl_en = QLabel("EN PIN:")
+        lbl_en.setStyleSheet(lbl_style)
+        badge_en = QLabel("lcd_en")
+        badge_en.setStyleSheet(badge_style)
         self.led_en = VirtualLED()
         
-        ctrl_lay.addWidget(lbl_ctrl)
-        ctrl_lay.addStretch()
-        ctrl_lay.addWidget(rs_lbl)
-        ctrl_lay.addWidget(self.led_rs)
-        ctrl_lay.addSpacing(30)
-        ctrl_lay.addWidget(en_lbl)
-        ctrl_lay.addWidget(self.led_en)
+        en_lay.addWidget(lbl_en)
+        en_lay.addStretch()
+        en_lay.addWidget(badge_en)
+        en_lay.addSpacing(15)
+        en_lay.addWidget(self.led_en)
 
+        pins_lay.addWidget(box_rs)
+        pins_lay.addWidget(box_en)
+
+        # Add all boxes to the main register layout
         regs_layout.addWidget(box_ir)
         regs_layout.addWidget(box_dr)
-        regs_layout.addWidget(box_ctrl)
+        regs_layout.addLayout(pins_lay)
 
-        # Center the stack of register boxes horizontally
+        # Center the entire stack horizontally
         boxes_wrapper = QHBoxLayout()
         boxes_wrapper.addStretch()
         boxes_wrapper.addLayout(regs_layout)
         boxes_wrapper.addStretch()
 
         self.layout.addLayout(boxes_wrapper)
-        self.layout.addStretch(2) # Pushes content towards the vertical center
+        self.layout.addStretch(2)
 
         # Startup Display Initialization
         boot_text = "   uP PRARAMBH      SYSTEM IDLE                                 "
@@ -293,6 +327,6 @@ if __name__ == "__main__":
     module = CharDisplayView()
     layout.addWidget(module)
     test_window.setWindowTitle("Test: HD44780 Emulation")
-    test_window.resize(600, 700)
+    test_window.resize(650, 750)
     test_window.show()
     sys.exit(app.exec_())

@@ -3,8 +3,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, 
     QLCDNumber, QApplication, QSlider, QLineEdit, QComboBox
 )
-from PyQt5.QtGui import QFont, QRegExpValidator
-from PyQt5.QtCore import Qt, pyqtSignal, QRegExp
+from PyQt5.QtGui import QFont, QRegExpValidator, QPainter, QPen, QColor, QBrush
+from PyQt5.QtCore import Qt, pyqtSignal, QRegExp, QPoint
 
 class SliderADCView(QWidget):
     # Emits (target_port_name, integer_value) whenever the slider moves
@@ -33,7 +33,7 @@ class SliderADCView(QWidget):
 
         # --- MAIN INTERFACE: Slider + Controls ---
         main_hbox = QHBoxLayout()
-        main_hbox.setSpacing(40)
+        main_hbox.setSpacing(50) # Increased spacing slightly to give room for diagram lines
 
         # 1. LEFT SIDE: The Vertical Analog Slider in a Grey Box
         self.slider_box = QFrame()
@@ -41,7 +41,7 @@ class SliderADCView(QWidget):
             QFrame {
                 border: 2px solid #CCCCCC;
                 border-radius: 8px;
-                background-color: #E5E5E5; /* Grey outer box */
+                background-color: #E5E5E5; 
             }
         """)
         slider_box_lay = QVBoxLayout(self.slider_box)
@@ -71,7 +71,7 @@ class SliderADCView(QWidget):
                 height: 22px;
                 margin: 0 -30px; 
                 border-radius: 4px;
-                border: 3px solid #00FFCC;
+                border: 3px solid #00FF00; /* Hardware Green */
             }
             QSlider::handle:vertical:hover {
                 background: #FFFFFF;
@@ -90,13 +90,14 @@ class SliderADCView(QWidget):
         
         slider_box_lay.addWidget(self.slider, alignment=Qt.AlignCenter)
         
-        # Wrap the box to keep it tightly fitted
         slider_wrap = QVBoxLayout()
         slider_wrap.addWidget(self.slider_box, alignment=Qt.AlignCenter)
         main_hbox.addLayout(slider_wrap)
 
         # 2. RIGHT SIDE: Settings & Readout
         right_vbox = QVBoxLayout()
+        # Align left so diagram lines can neatly plug into them
+        right_vbox.setAlignment(Qt.AlignLeft) 
 
         input_style = """
             QLineEdit {
@@ -114,21 +115,21 @@ class SliderADCView(QWidget):
         
         hex_validator = QRegExpValidator(QRegExp("[0-9A-Fa-f]{1,8}"))
 
-        # --- Top: Max Input (Hex) ---
-        max_hbox = QHBoxLayout()
-        max_lbl = QLabel("MAX VALUE (HEX):")
-        max_lbl.setStyleSheet(lbl_style)
+        # --- Top: Max Input (Hex) --- Stacked style like the Gauge
+        max_vbox = QVBoxLayout()
+        max_vbox.setSpacing(5)
+        lbl_max = QLabel("MAX (HEX)")
+        lbl_max.setStyleSheet(lbl_style)
         self.input_max = QLineEdit("FF")
         self.input_max.setValidator(hex_validator)
         self.input_max.setStyleSheet(input_style)
-        self.input_max.setFixedWidth(100)
+        self.input_max.setFixedWidth(85)
         self.input_max.setAlignment(Qt.AlignCenter)
         self.input_max.textChanged.connect(self.calculate_and_emit)
         
-        max_hbox.addWidget(max_lbl)
-        max_hbox.addStretch()
-        max_hbox.addWidget(self.input_max)
-        right_vbox.addLayout(max_hbox)
+        max_vbox.addWidget(lbl_max)
+        max_vbox.addWidget(self.input_max)
+        right_vbox.addLayout(max_vbox)
 
         right_vbox.addStretch(1)
 
@@ -138,7 +139,7 @@ class SliderADCView(QWidget):
             QFrame {
                 border: 2px solid #CCCCCC;
                 border-radius: 8px;
-                background-color: #E5E5E5; /* Distinct Grey Color */
+                background-color: #E5E5E5; 
             }
         """)
         center_lay = QVBoxLayout(center_box)
@@ -169,7 +170,7 @@ class SliderADCView(QWidget):
         self.lcd_val.setStyleSheet("""
             QLCDNumber {
                 background-color: #1E1E1E; 
-                color: #00FF00; /* Correct Hardware Green */
+                color: #00FF00; 
                 border: 3px inset #555555; 
                 border-radius: 6px;
             }
@@ -186,36 +187,73 @@ class SliderADCView(QWidget):
 
         right_vbox.addStretch(1)
 
-        # --- Bottom: Min Input (Hex) ---
-        min_hbox = QHBoxLayout()
-        min_lbl = QLabel("MIN VALUE (HEX):")
-        min_lbl.setStyleSheet(lbl_style)
+        # --- Bottom: Min Input (Hex) --- Stacked style like the Gauge
+        min_vbox = QVBoxLayout()
+        min_vbox.setSpacing(5)
+        lbl_min = QLabel("MIN (HEX)")
+        lbl_min.setStyleSheet(lbl_style)
         self.input_min = QLineEdit("00")
         self.input_min.setValidator(hex_validator)
         self.input_min.setStyleSheet(input_style)
-        self.input_min.setFixedWidth(100)
+        self.input_min.setFixedWidth(85)
         self.input_min.setAlignment(Qt.AlignCenter)
         self.input_min.textChanged.connect(self.calculate_and_emit)
         
-        min_hbox.addWidget(min_lbl)
-        min_hbox.addStretch()
-        min_hbox.addWidget(self.input_min)
-        right_vbox.addLayout(min_hbox)
+        min_vbox.addWidget(lbl_min)
+        min_vbox.addWidget(self.input_min)
+        right_vbox.addLayout(min_vbox)
 
-        # Balance right layout
         wrapper_right = QHBoxLayout()
-        wrapper_right.addStretch()
         wrapper_right.addLayout(right_vbox)
         wrapper_right.addStretch()
 
         main_hbox.addLayout(wrapper_right)
-        main_hbox.setStretch(0, 2) 
-        main_hbox.setStretch(1, 3) 
+        main_hbox.setStretch(0, 1) 
+        main_hbox.setStretch(1, 1) 
 
         content_vbox.addLayout(main_hbox)
         content_vbox.addStretch(1)
 
         self.layout.addLayout(content_vbox)
+
+    def paintEvent(self, event):
+        """Overrides paintEvent to draw orthogonal schematic lines connecting the slider to the inputs."""
+        # Ensure widgets have geometry assigned before drawing
+        if not hasattr(self, 'slider_box') or not hasattr(self, 'input_max'):
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        pen = QPen(QColor("#A0A0A0"), 2, Qt.DashLine)
+        painter.setPen(pen)
+        
+        # 1. Acquire global coordinates mapped to this widget's coordinate space
+        # Slider Top Right (Mapping to approx upper bound of the track)
+        p_slider_top = self.slider_box.mapTo(self, QPoint(self.slider_box.width(), 40))
+        # Slider Bottom Right (Mapping to approx lower bound of the track)
+        p_slider_bot = self.slider_box.mapTo(self, QPoint(self.slider_box.width(), self.slider_box.height() - 40))
+        
+        # Input Left Centers
+        p_max_in = self.input_max.mapTo(self, QPoint(0, self.input_max.height() // 2))
+        p_min_in = self.input_min.mapTo(self, QPoint(0, self.input_min.height() // 2))
+        
+        # 2. Draw MAX Line (Orthogonal Routing: Right -> Down/Up -> Right)
+        mid_x = p_slider_top.x() + 25  # Route 25px out from the slider box
+        painter.drawLine(p_slider_top, QPoint(mid_x, p_slider_top.y()))
+        painter.drawLine(QPoint(mid_x, p_slider_top.y()), QPoint(mid_x, p_max_in.y()))
+        painter.drawLine(QPoint(mid_x, p_max_in.y()), p_max_in)
+        
+        # 3. Draw MIN Line (Orthogonal Routing: Right -> Down/Up -> Right)
+        painter.drawLine(p_slider_bot, QPoint(mid_x, p_slider_bot.y()))
+        painter.drawLine(QPoint(mid_x, p_slider_bot.y()), QPoint(mid_x, p_min_in.y()))
+        painter.drawLine(QPoint(mid_x, p_min_in.y()), p_min_in)
+
+        # 4. Draw Glowing Anchor Dots on the Slider Casing
+        painter.setBrush(QBrush(QColor("#00FF00")))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(p_slider_top, 4, 4)
+        painter.drawEllipse(p_slider_bot, 4, 4)
 
     def set_available_inputs(self, inputs):
         """Populates the dropdown with available Verilog input ports."""
@@ -235,25 +273,19 @@ class SliderADCView(QWidget):
     def calculate_and_emit(self):
         """Maps the 0-1000 slider position to the Min/Max Hex range and emits the value."""
         try:
-            # Parse Hexadecimal inputs
             min_val = int(self.input_min.text() or "0", 16)
             max_val = int(self.input_max.text() or "0", 16)
         except ValueError:
             return
 
-        # Calculate percentage (0.0 to 1.0)
         pct = self.slider.value() / 1000.0
-        
-        # Linear interpolation mapped to hardware digital value
         current_val = int(min_val + (max_val - min_val) * pct)
         
-        # Update UI Hex Display
         if current_val < 0:
             self.lcd_val.display(f"{current_val & 0xFFFF:04X}")
         else:
             self.lcd_val.display(f"{current_val:04X}")
 
-        # Route to Hardware Engine
         target = self.combo_target.currentText()
         if target != "None":
             self.adc_updated.emit(target, current_val)
