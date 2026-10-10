@@ -286,18 +286,12 @@ class CharDisplayView(QWidget):
             self.prev_en = en_bit
 
     def refresh_display(self):
-        """Draws the memory array to the grid and visually highlights the cursor."""
+        """Draws the memory array directly to the character grid without cursor highlighting."""
         for i in range(64):
             self.cells[i].setText(self.memory[i])
-            if i == self.cursor:
-                # Invert colors to show where the hardware cursor is currently pointing!
-                self.cells[i].setStyleSheet("""
-                    QLabel { background-color: #00FFCC; color: #1A1E24; border-radius: 2px; }
-                """)
-            else:
-                self.cells[i].setStyleSheet("""
-                    QLabel { background-color: #1A1E24; color: #00FFCC; border-radius: 2px; }
-                """)
+            self.cells[i].setStyleSheet("""
+                QLabel { background-color: #1A1E24; color: #00FFCC; border-radius: 2px; }
+            """)
 
     def show_help(self):
         msg = QMessageBox(self)

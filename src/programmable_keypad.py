@@ -29,7 +29,8 @@ class MechanicalKey(QPushButton):
         super().__init__()
         self.parent_view = parent_view
         self.label_text = f"CMD_{idx:X}"
-        self.hex_val = 0x01
+        # Set default value dynamically based on 1-based index (0x01 to 0x10)
+        self.hex_val = idx + 1
         self.target_port = "None"
         
         self.setFixedSize(105, 105)
@@ -51,17 +52,27 @@ class MechanicalKey(QPushButton):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
-            dlg = KeyConfigDialog(self.label_text, self.hex_val, self.parent_view.available_inputs, self)
-            if dlg.exec_():
-                try:
-                    self.hex_val = int(dlg.hex_edit.text(), 16)
-                    self.label_text = dlg.label_edit.text()
-                    self.target_port = dlg.target_combo.currentText()
-                    self.update_display()
-                except ValueError:
-                    QMessageBox.warning(self, "Error", "Invalid Hexadecimal!")
+            self.open_config_dialog()
         else:
             super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.open_config_dialog()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def open_config_dialog(self):
+        """Helper method to launch the key configuration dialog."""
+        dlg = KeyConfigDialog(self.label_text, self.hex_val, self.parent_view.available_inputs, self)
+        if dlg.exec_():
+            try:
+                self.hex_val = int(dlg.hex_edit.text(), 16)
+                self.label_text = dlg.label_edit.text()
+                self.target_port = dlg.target_combo.currentText()
+                self.update_display()
+            except ValueError:
+                QMessageBox.warning(self, "Error", "Invalid Hexadecimal!")
 
 class ProgrammableKeypadView(QWidget):
     keypad_triggered = pyqtSignal(str, int) # Relays up to main

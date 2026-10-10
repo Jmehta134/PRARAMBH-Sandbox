@@ -17,6 +17,7 @@ from programmable_keypad import ProgrammableKeypadView
 from slider import SliderADCView
 from gauge import GaugeADCView
 from mouse_dir import MouseDirectionView
+from string_input import StringInputView
 from console_log import ConsoleLogView
 
 # Import the Dynamic Simulation Backend Engine
@@ -167,6 +168,7 @@ class SandboxPane(QFrame):
             "Slider ADC In",         # 6
             "Gauge ADC Out",         # 7
             "Mouse dir In",          # 8
+            "String In",          # 8
             "Console Log"            # 9
         ])
         self.tool_selector.currentIndexChanged.connect(self.switch_tool)
@@ -220,6 +222,10 @@ class SandboxPane(QFrame):
         self.mouse_sensor = MouseDirectionView()
         self.stack.addWidget(self.mouse_sensor)
 
+        # String Input
+        self.string_input = StringInputView()
+        self.stack.addWidget(self.string_input)
+
         # Console Log
         self.console_log = ConsoleLogView()
         self.stack.addWidget(self.console_log)
@@ -254,7 +260,7 @@ class UnifiedSandboxIDE(QMainWindow):
         
         # --- INITIALIZE SIMULATION ENGINE ---
         self.engine = SimulationEngine()
-        self.engine.log_message.connect(self.left_pane.console_log.log_message)
+        self.engine.log_message.connect(self.broadcast_log)
         self.engine.parsed_design.connect(self.distribute_parsed_data)
         self.engine.hardware_updated.connect(self.sync_hardware_to_ui)
         
@@ -271,6 +277,9 @@ class UnifiedSandboxIDE(QMainWindow):
 
         self.left_pane.slider_adc.adc_updated.connect(self.engine.send_command)
         self.right_pane.slider_adc.adc_updated.connect(self.engine.send_command)
+
+        self.left_pane.string_input.string_updated.connect(self.engine.send_command)
+        self.right_pane.string_input.string_updated.connect(self.engine.send_command)
         
         # Generic bindings (The keypad dynamically targets specific ports)
         self.left_pane.keypad.keypad_triggered.connect(self.engine.send_command)
@@ -283,6 +292,11 @@ class UnifiedSandboxIDE(QMainWindow):
         self.btn_pulse.clicked.connect(lambda: self.engine.send_command('clk', 1))
         self.btn_reset.pressed.connect(lambda: self.engine.send_command('rst', 1))
         self.btn_reset.released.connect(lambda: self.engine.send_command('rst', 0))
+
+    def broadcast_log(self, message, level="INFO"):
+        """Broadcasts simulation logs to both left and right console panes."""
+        self.left_pane.console_log.log_message(message, level)
+        self.right_pane.console_log.log_message(message, level)
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -360,7 +374,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.right_pane = SandboxPane()
         
         # --- INITIAL CONFIGURATION ON STARTUP ---
-        self.left_pane.tool_selector.setCurrentIndex(2)  # Console Log
+        self.left_pane.tool_selector.setCurrentIndex(9)  # Console Log
         self.right_pane.tool_selector.setCurrentIndex(0) # Empty Workspace
         
         self.splitter.addWidget(self.left_pane)
@@ -392,13 +406,15 @@ class UnifiedSandboxIDE(QMainWindow):
         self.right_pane.register_monitor.set_available_signals(parsed['internals'])
         
         # Supply data to Displays
-        self.left_pane.char_display.set_available_signals(parsed['internals'] + parsed['outputs'])
-        self.right_pane.char_display.set_available_signals(parsed['internals'] + parsed['outputs'])
 
         self.left_pane.slider_adc.set_available_inputs(parsed['inputs'])
         self.right_pane.slider_adc.set_available_inputs(parsed['inputs'])
 
-        self.left_pane.gauge_adc.set_available_signals(parsed['internals'] + parsed['outputs'])
+        self.left_pane.gauge_adc.set_available_signals(parsed['outputs'] + parsed['internals'])
+        self.right_pane.gauge_adc.set_available_signals(parsed['outputs'] + parsed['internals'])
+
+        self.left_pane.string_input.set_available_inputs(parsed['inputs'])
+        self.right_pane.string_input.set_available_inputs(parsed['inputs'])
 
     def sync_hardware_to_ui(self, state_dict):
         """Routes live simulation dictionary to active UI widgets."""
@@ -437,6 +453,7 @@ class UnifiedSandboxIDE(QMainWindow):
             self.clock_timer.start(interval)
             
             self.left_pane.console_log.log_message("Clock Engine switched to AUTO mode.", "INFO")
+            self.right_pane.console_log.log_message("Clock Engine switched to AUTO mode.", "INFO")
         else:
             self.btn_lever.setText("MANUAL")
             self.btn_pulse.setEnabled(True)
@@ -446,6 +463,7 @@ class UnifiedSandboxIDE(QMainWindow):
             self.clock_timer.stop()
             
             self.left_pane.console_log.log_message("Clock Engine switched to MANUAL mode.", "INFO")
+            self.right_pane.console_log.log_message("Clock Engine switched to MANUAL mode.", "INFO")
 
     def update_clock_frequency(self):
         """Dynamically updates the clock speed if AUTO mode is currently active."""
