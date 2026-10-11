@@ -1,64 +1,102 @@
-name: Build and Upload App Releases
+name: Build and Release
 
 on:
   push:
     tags:
-      - 'v*'  # Triggers automatically whenever you push a version tag (e.g., v1.0.0)
+      - 'v*' # Triggers on version tags (e.g., v1.0.3)
+
+permissions:
+  contents: write # Allows the bot to commit version.json and upload releases
 
 jobs:
-  build:
-    permissions:
-      contents: write  # Grants permissions to create GitHub Releases
+  update-manifest:
+    name: Auto-Update version.json
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: main # Target the main branch
+          
+      - name: Generate New version.json
+        run: |
+          # Strip the 'v' (v1.0.3 -> 1.0.3)
+          VERSION=${GITHUB_REF_NAME#v}
+          
+          # Write the updated JSON dynamically
+          cat <<EOF > version.json
+          {
+            "version": "$VERSION",
+            "download_url_windows": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/sandbox_${{ github.ref_name }}_windows.zip",
+            "download_url_linux": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/sandbox_${{ github.ref_name }}_linux.zip"
+          }
+          EOF
+          
+      - name: Commit and Push to Main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "Auto-update version.json for ${{ github.ref_name }}" || echo "No changes to commit"
+          git push origin main
 
+  build-and-release:
+    needs: update-manifest # Wait for version.json to be pushed first
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - os: windows-latest
-            asset_name: app_v1.0.0_windows.zip
-            path_sep: ";"
-          - os: ubuntu-latest
-            asset_name: app_v1.0.0_linux.zip
-            path_sep: ":"
-
-    runs-on: ${{ matrix.os }}
+            appmanager_exe: AppManager.exe
+            sandbox_zip: sandbox_${{ github.ref_name }}_windows.zip
+          - os: ubuntu-20.04
+            appmanager_exe: AppManager
+            sandbox_zip: sandbox_${{ github.ref_name }}_linux.zip
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
-      - name: Install Linux Build Dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt update
-          sudo apt install -y iverilog zip
-          mkdir -p bin/linux/bin bin/linux/lib/ivl
-          cp $(which iverilog) bin/linux/bin/
-          cp $(which vvp) bin/linux/bin/
-          cp /usr/lib/x86_64-linux-gnu/ivl/* bin/linux/lib/ivl/ || cp /usr/lib/ivl/* bin/linux/lib/ivl/
-
-      - name: Install Python Dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install PyQt5 pyinstaller requests
+          pip install PyQt5 requests pyinstaller Pillow
 
-      - name: Build Core App with PyInstaller
+      - name: Build Windows Binaries
+        if: matrix.os == 'windows-latest'
         run: |
-          pyinstaller --noconfirm --onedir --windowed --add-data "examples${{ matrix.path_sep }}examples" --add-data "bin${{ matrix.path_sep }}bin" src/main.py
+          # Dynamically convert icon.png to icon.ico for PyInstaller
+          python -c "from PIL import Image; Image.open('assets/icon.png').save('assets/icon.ico')"
+          
+          pyinstaller --noconfirm --onefile --windowed --icon="assets\icon.ico" --name "AppManager" launcher.py
+          
+          # Notice we bundle assets/icon.png into the root (.) of the app, so your code doesn't need to change!
+          pyinstaller --noconfirm --onedir --windowed --icon="assets\icon.ico" --name "Sandbox" --add-data "examples;examples" --add-data "bin;bin" --add-data "assets\icon.png;." src\main.py
+          
+          Compress-Archive -Path "dist\Sandbox\*" -DestinationPath "${{ matrix.sandbox_zip }}" -Force
 
-      - name: Compress Release Artifact
-        shell: bash
+      - name: Build Linux Binaries
+        if: matrix.os == 'ubuntu-20.04'
         run: |
-          cd dist/main
-          zip -r ../../${{ matrix.asset_name }} .
+          pyinstaller --noconfirm --onefile --windowed --icon="assets/icon.png" --name "AppManager" launcher.py
+          
+          pyinstaller --noconfirm --onedir --name "Sandbox" --hidden-import=pkgutil --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtWidgets --add-data "examples:examples" --add-data "bin:bin" --add-data "assets/icon.png:." src/main.py
+          
+          find dist/Sandbox -type f \( -name "Sandbox" -o -name "iverilog" -o -name "vvp" -o -name "ivl" -o -name "ivlpp" \) -exec chmod +x {} +
+          
+          cd dist/Sandbox
+          zip -r ../../${{ matrix.sandbox_zip }} .
+          cd ../..
 
-      - name: Upload Zip to Release
+      - name: Upload Binaries to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ matrix.asset_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            dist/${{ matrix.appmanager_exe }}
+            ${{ matrix.sandbox_zip }}
