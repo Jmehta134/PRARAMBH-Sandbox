@@ -43,8 +43,8 @@ class DownloadWorker(QThread):
 class AppManagerWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("µP PRARAMBH - App Manager")
-        self.setFixedSize(480, 350)  # Increased window size to fit larger text
+        self.setWindowTitle("µP Verilog Sandbox - App Manager")
+        self.setFixedSize(480, 350)
         self.setStyleSheet("""
             QWidget { background-color: #1E1E1E; color: #FFFFFF; font-family: 'Segoe UI', sans-serif; font-size: 15px; }
             QPushButton { background-color: #0078D7; color: white; border-radius: 5px; font-weight: bold; padding: 12px; font-size: 14px; }
@@ -60,7 +60,7 @@ class AppManagerWindow(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 25, 25, 25)
 
-        self.lbl_title = QLabel("µP PRARAMBH APP MANAGER")
+        self.lbl_title = QLabel("µP VERILOG SANDBOX APP MANAGER")
         self.lbl_title.setStyleSheet("font-size: 20px; font-weight: 900; color: #00E5FF; margin-bottom: 10px;")
         self.lbl_title.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.lbl_title)
@@ -97,7 +97,7 @@ class AppManagerWindow(QWidget):
         layout.addWidget(self.btn_delete)
 
         self.refresh_status()
-        
+
     def is_installed(self):
         binary_name = "Sandbox.exe" if sys.platform == "win32" else "Sandbox"
         binary_path = os.path.join("app", binary_name)
@@ -162,7 +162,6 @@ class AppManagerWindow(QWidget):
                 )
                 if reply == QMessageBox.Yes:
                     url = self.get_platform_download_url(remote_info)
-                    # Updates automatically repair shortcuts if they were deleted
                     self.download_and_install(url, remote_info, create_desktop=True)
             else:
                 QMessageBox.information(self, "Up to Date", f"You are on the latest version ({local_ver}).")
@@ -229,7 +228,6 @@ class AppManagerWindow(QWidget):
             with open("current_version.json", "w") as f:
                 json.dump(remote_info, f)
 
-            # Generate Shortcuts
             self.create_shortcuts(create_desktop)
 
             QMessageBox.information(self, "Success", "Application successfully installed/updated!")
@@ -239,7 +237,6 @@ class AppManagerWindow(QWidget):
             self.refresh_status()
 
     def create_shortcuts(self, create_desktop=True):
-        """Generates Start Menu (always) and Desktop shortcuts (optional)."""
         try:
             app_dir = os.path.abspath("app")
             
@@ -248,7 +245,7 @@ class AppManagerWindow(QWidget):
                 vbs_script = f"""
                 Set ws = WScript.CreateObject("WScript.Shell")
                 startMenu = ws.SpecialFolders("Programs")
-                Set link2 = ws.CreateShortcut(startMenu & "\\µP PRARAMBH Sandbox.lnk")
+                Set link2 = ws.CreateShortcut(startMenu & "\\µP Verilog Sandbox.lnk")
                 link2.TargetPath = "{exe_path}"
                 link2.WorkingDirectory = "{app_dir}"
                 link2.IconLocation = "{exe_path},0"
@@ -257,7 +254,7 @@ class AppManagerWindow(QWidget):
                 if create_desktop:
                     vbs_script += f"""
                     desktop = ws.SpecialFolders("Desktop")
-                    Set link = ws.CreateShortcut(desktop & "\\µP PRARAMBH Sandbox.lnk")
+                    Set link = ws.CreateShortcut(desktop & "\\µP Verilog Sandbox.lnk")
                     link.TargetPath = "{exe_path}"
                     link.WorkingDirectory = "{app_dir}"
                     link.IconLocation = "{exe_path},0"
@@ -274,7 +271,7 @@ class AppManagerWindow(QWidget):
                 icon_path = os.path.join(app_dir, "icon.png")
                 
                 desktop_entry = f"""[Desktop Entry]
-Name=µP PRARAMBH Sandbox
+Name=µP Verilog Sandbox
 Comment=Interactive Verilog Simulation Debugger
 Exec={exe_path}
 Icon={icon_path if os.path.exists(icon_path) else 'utilities-terminal'}
@@ -282,17 +279,15 @@ Terminal=false
 Type=Application
 Categories=Development;Engineering;Electronics;
 """
-                # App Menu (Always)
                 apps_dir = os.path.expanduser("~/.local/share/applications")
                 os.makedirs(apps_dir, exist_ok=True)
-                with open(os.path.join(apps_dir, "prarambh-sandbox.desktop"), "w") as f:
+                with open(os.path.join(apps_dir, "verilog-sandbox.desktop"), "w") as f:
                     f.write(desktop_entry)
                 
-                # Desktop (Optional)
                 if create_desktop:
                     desktop_dir = os.path.expanduser("~/Desktop")
                     if os.path.exists(desktop_dir):
-                        desktop_file = os.path.join(desktop_dir, "prarambh-sandbox.desktop")
+                        desktop_file = os.path.join(desktop_dir, "verilog-sandbox.desktop")
                         with open(desktop_file, "w") as f:
                             f.write(desktop_entry)
                         os.chmod(desktop_file, 0o755)
@@ -300,16 +295,15 @@ Categories=Development;Engineering;Electronics;
             print(f"Non-fatal error creating shortcuts: {e}")
 
     def remove_shortcuts(self):
-        """Cleans up Start Menu and Desktop shortcuts upon uninstallation."""
         try:
             if sys.platform == "win32":
-                desktop_link = os.path.join(os.environ["USERPROFILE"], "Desktop", "µP PRARAMBH Sandbox.lnk")
-                start_link = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "µP PRARAMBH Sandbox.lnk")
+                desktop_link = os.path.join(os.environ["USERPROFILE"], "Desktop", "µP Verilog Sandbox.lnk")
+                start_link = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "µP Verilog Sandbox.lnk")
                 if os.path.exists(desktop_link): os.remove(desktop_link)
                 if os.path.exists(start_link): os.remove(start_link)
             else:
-                desktop_link = os.path.expanduser("~/Desktop/prarambh-sandbox.desktop")
-                app_link = os.path.expanduser("~/.local/share/applications/prarambh-sandbox.desktop")
+                desktop_link = os.path.expanduser("~/Desktop/verilog-sandbox.desktop")
+                app_link = os.path.expanduser("~/.local/share/applications/verilog-sandbox.desktop")
                 if os.path.exists(desktop_link): os.remove(desktop_link)
                 if os.path.exists(app_link): os.remove(app_link)
         except Exception as e:
