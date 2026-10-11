@@ -374,7 +374,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.right_pane = SandboxPane()
         
         # --- INITIAL CONFIGURATION ON STARTUP ---
-        self.left_pane.tool_selector.setCurrentIndex(9)  # Console Log
+        self.left_pane.tool_selector.setCurrentIndex(10)  # Console Log
         self.right_pane.tool_selector.setCurrentIndex(0) # Empty Workspace
         
         self.splitter.addWidget(self.left_pane)

@@ -1,0 +1,64 @@
+name: Build and Upload App Releases
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers automatically whenever you push a version tag (e.g., v1.0.0)
+
+jobs:
+  build:
+    permissions:
+      contents: write  # Grants permissions to create GitHub Releases
+
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            asset_name: app_v1.0.0_windows.zip
+            path_sep: ";"
+          - os: ubuntu-latest
+            asset_name: app_v1.0.0_linux.zip
+            path_sep: ":"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Linux Build Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y iverilog zip
+          mkdir -p bin/linux/bin bin/linux/lib/ivl
+          cp $(which iverilog) bin/linux/bin/
+          cp $(which vvp) bin/linux/bin/
+          cp /usr/lib/x86_64-linux-gnu/ivl/* bin/linux/lib/ivl/ || cp /usr/lib/ivl/* bin/linux/lib/ivl/
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt5 pyinstaller requests
+
+      - name: Build Core App with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --add-data "examples${{ matrix.path_sep }}examples" --add-data "bin${{ matrix.path_sep }}bin" src/main.py
+
+      - name: Compress Release Artifact
+        shell: bash
+        run: |
+          cd dist/main
+          zip -r ../../${{ matrix.asset_name }} .
+
+      - name: Upload Zip to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

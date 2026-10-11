@@ -1,10 +1,22 @@
-# µP PRARAMBH Sandbox
+## 🚀 Download & Installation
 
-A dynamic Verilog Interface built for debugging hardware modules to aid learning with the PRARAMBH Course. It seamlessly connects a PyQt5 user interface with eSim's backend i.e. Icarus Verilog  providing real-time register monitoring, auto-reset initialization, and interactive hardware testing.
+**µP PRARAMBH** is distributed as a lightweight, portable application managed by `AppManager`.
 
-## Prerequisites
+### 1. Download AppManager for your OS
 
-1. **Python 3.8+** (Requires `PyQt5`)
-2. **Icarus Verilog** (Sourced from FOSSEE eSim)
-   * The system expects the `iverilog` and `vvp` executables at: `C:\FOSSEE\eSim\library\bin\iverilog\bin`
-   * *Note: If your eSim installation is located elsewhere, update the toolchain paths inside `src/sim_engine.py`.*
+* **Windows:** [Download AppManager.exe](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/download/v1.0.0/AppManager.exe)
+* **Linux:** [Download AppManager](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/download/v1.0.0/AppManager)
+
+---
+
+### 2. Run AppManager
+
+#### Windows:
+1. Double-click `AppManager.exe`.
+2. Click **INSTALL SANDBOX APPLICATION**.
+
+#### Linux:
+1. Open terminal in your download folder and grant execution permissions:
+   ```bash
+   chmod +x AppManager
+   ./AppManager

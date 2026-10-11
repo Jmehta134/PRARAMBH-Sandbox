@@ -1,5 +1,7 @@
+import sys
 import os
-import re
+import platform
+import stat
 from PyQt5.QtCore import QObject, QProcess, pyqtSignal
 
 class SimulationEngine(QObject):
@@ -9,12 +11,44 @@ class SimulationEngine(QObject):
 
     def __init__(self):
         super().__init__()
+        
+        # 1. Initialize process and instance state FIRST
         self.process = QProcess()
         self.process.readyReadStandardOutput.connect(self.read_stdout)
         self.process.readyReadStandardError.connect(self.read_stderr)
         
-        self.iverilog_path = r"C:\FOSSEE\eSim\library\bin\iverilog\bin\iverilog.exe"
-        self.vvp_path = r"C:\FOSSEE\eSim\library\bin\iverilog\bin\vvp.exe"
+        self.input_map = {}
+        self.verilog_signals = []
+        self.ui_signals = []
+        self.stdout_buffer = ""
+
+        # 2. Resolve Root Directory (Handles src/ subfolder vs PyInstaller bundle)
+        if getattr(sys, 'frozen', False):
+            # Bundled with PyInstaller: root is current executable or _MEIPASS temp dir
+            root_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        else:
+            # Running as raw script in src/: Go ONE level up from src/ to project root
+            src_dir = os.path.dirname(os.path.abspath(__file__))
+            root_dir = os.path.abspath(os.path.join(src_dir, ".."))
+
+        # 3. Dynamic OS Binary Resolution
+        system_os = platform.system().lower()
+
+        if system_os == "windows":
+            self.iverilog_path = os.path.join(root_dir, "bin", "windows", "bin", "iverilog.exe")
+            self.vvp_path = os.path.join(root_dir, "bin", "windows", "bin", "vvp.exe")
+        else:  # Linux / macOS
+            self.iverilog_path = os.path.join(root_dir, "bin", "linux", "bin", "iverilog")
+            self.vvp_path = os.path.join(root_dir, "bin", "linux", "bin", "vvp")
+
+            # Apply execute permissions (+x) on Linux binaries
+            for binary in [self.iverilog_path, self.vvp_path]:
+                if os.path.exists(binary):
+                    st = os.stat(binary)
+                    os.chmod(binary, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+        # 4. Debug print to confirm path in console
+        print(f"[DEBUG] Resolved iverilog path: {self.iverilog_path}")
         
         self.input_map = {}
         self.verilog_signals = []
