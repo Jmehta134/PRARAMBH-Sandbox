@@ -30,10 +30,10 @@ No prior toolchain configuration or Python setup is required. Download `AppManag
 
 ### 1. Download AppManager
 
-| Platform | Bootstrapper Download | Executable Name |
+| Platform | Download Link | File Name |
 | :--- | :--- | :--- |
-| **Windows** (10/11) | [**Download AppManager.exe**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/download/v1.0.0/AppManager.exe) | `AppManager.exe` |
-| **Linux** (Ubuntu/Debian) | [**Download AppManager**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/download/v1.0.0/AppManager) | `AppManager` |
+| **Windows** (10/11) | [**Download AppManager.exe**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/latest/download/AppManager.exe) | `AppManager.exe` |
+| **Linux** (Ubuntu/Debian) | [**Download AppManager**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/latest/download/AppManager) | `AppManager` |
 
 ### 2. Install & Run
 
