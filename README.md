@@ -6,7 +6,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/Jmehta134/PRARAMBH-Sandbox?style=for-the-badge&color=0078D7)](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases)
 [![Platform Support](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-00E5FF?style=for-the-badge)](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](LICENSE)
 
 ---
 
@@ -90,4 +90,4 @@ pyinstaller --noconfirm --onefile --windowed --name "AppManager" launcher.py
 
 ## 📜 License
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
+This project is open-source software licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [`LICENSE`](LICENSE) for details.
