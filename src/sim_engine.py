@@ -2,6 +2,7 @@ import sys
 import os
 import platform
 import stat
+import re
 from PyQt5.QtCore import QObject, QProcess, pyqtSignal
 
 class SimulationEngine(QObject):
