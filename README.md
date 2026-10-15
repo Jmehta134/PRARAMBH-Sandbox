@@ -20,29 +20,28 @@
 
 **µP PRARAMBH Sandbox** is an interactive debugging interface for Verilog logic circuit simulations. Designed for rapid verification and experiment analysis rather than full-scale code editing, it pairs a visual debugging GUI with pre-bundled **Icarus Verilog (`iverilog`)** toolchains—delivering zero-configuration simulation execution on Windows and Linux.
 
-The application is managed via **`AppManager`**, a portable utility handling automated installation, updates, repairs, and uninstalls.
+The application is managed via **`Installer`**, a portable utility handling automated installation, updates, repairs, and uninstalls.
 
 ---
 
 ## 🚀 Quick Start
 
-No prior toolchain configuration or Python setup is required. Download `AppManager` for your operating system:
+No prior toolchain configuration or Python setup is required. Download `Installer` for your operating system:
 
-### 1. Download AppManager
+### 1. Download Installer
 
 | Platform | Download Link | File Name |
 | :--- | :--- | :--- |
-| **Windows** (10/11) | [**Download AppManager.exe**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/latest/download/AppManager.exe) | `AppManager.exe` |
-| **Linux** (Ubuntu/Debian) | [**Download AppManager**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/latest/download/AppManager) | `AppManager` |
+| **Windows** (10/11) | [**Download Installer.exe**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/latest/download/Installer.exe) | `Installer.exe` |
+| **Linux** (Ubuntu/Debian) | [**Download Installer**](https://github.com/Jmehta134/PRARAMBH-Sandbox/releases/latest/download/Installer) | `Installer` |
 
 ### 2. Install & Run
 
-* **Windows**: Double-click `AppManager.exe` and click **INSTALL SANDBOX APPLICATION**.
-* **Linux**: Open terminal in your download directory, grant permissions, and run:
+- **Windows**: Double-click `Installer.exe` and click **INSTALL SANDBOX APPLICATION**.
+- **Linux**: Open terminal in your download directory, grant permissions, and run:
   ```bash
-  chmod +x AppManager
-  ./AppManager
-  ```
+  chmod +x Installer
+  ./Installer
 
 ---
 
@@ -79,11 +78,11 @@ PRARAMBH-Sandbox/
 ```bash
 # Windows (PowerShell)
 pyinstaller --noconfirm --onedir --windowed --name "Sandbox" --add-data "examples;examples" --add-data "bin;bin" src/main.py
-pyinstaller --noconfirm --onefile --windowed --name "AppManager" launcher.py
+pyinstaller --noconfirm --onefile --windowed --name "Installer" launcher.py
 
 # Linux (Bash / WSL2)
 pyinstaller --noconfirm --onedir --windowed --name "Sandbox" --hidden-import=pkgutil --add-data "examples:examples" --add-data "bin:bin" src/main.py
-pyinstaller --noconfirm --onefile --windowed --name "AppManager" launcher.py
+pyinstaller --noconfirm --onefile --windowed --name "Installer" launcher.py
 ```
 
 ---
