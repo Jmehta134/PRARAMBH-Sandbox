@@ -188,7 +188,7 @@ class MouseDirectionView(QWidget):
         
         self.tracker_timer = QTimer(self)
         self.tracker_timer.timeout.connect(self.poll_mouse)
-        self.tracker_timer.start(50)
+        # Timer is no longer started automatically
 
     def poll_mouse(self):
         from PyQt5.QtGui import QCursor
@@ -217,6 +217,23 @@ class MouseDirectionView(QWidget):
             
             self.lcd_val.display(f"{self.current_val:02X}")
             self.mouse_updated.emit("mouse_dir", self.current_val)
+
+    def set_auto_clock(self, active: bool):
+        """Enables or disables mouse tracking based on the auto clock state."""
+        if active:
+            from PyQt5.QtGui import QCursor
+            self.last_pos = QCursor.pos()  # Reset baseline to prevent sudden jumps
+            self.tracker_timer.start(50)   # Resume polling at 50ms intervals
+        else:
+            self.tracker_timer.stop()
+            
+            # Force the interface to a zeroed/resting state
+            if self.current_val != 0:
+                self.current_val = 0
+                self.canvas.active_dir = -1
+                self.canvas.update()
+                self.lcd_val.display("00")
+                self.mouse_updated.emit("mouse_dir", 0)
 
     def show_help(self):
         msg = QMessageBox(self)
@@ -247,6 +264,7 @@ if __name__ == "__main__":
     test_window.setStyleSheet("background-color: #FAFAFA;")
     layout = QVBoxLayout(test_window)
     module = MouseDirectionView()
+    module.set_auto_clock(True)  # Force enable for standalone testing
     layout.addWidget(module)
     test_window.setWindowTitle("Test: Mouse Direction Sensor")
     test_window.resize(600, 750)

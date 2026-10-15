@@ -6,7 +6,7 @@ on:
       - 'v*' # Triggers on version tags (e.g., v1.0.3)
 
 permissions:
-  contents: write # Allows the bot to commit version.json and upload releases
+  contents: write # Allows committing version.json and creating releases
 
 jobs:
   update-manifest:
@@ -16,14 +16,11 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: main # Target the main branch
-          
+          ref: main
+
       - name: Generate New version.json
         run: |
-          # Strip the 'v' (v1.0.3 -> 1.0.3)
           VERSION=${GITHUB_REF_NAME#v}
-          
-          # Write the updated JSON dynamically
           cat <<EOF > version.json
           {
             "version": "$VERSION",
@@ -31,7 +28,7 @@ jobs:
             "download_url_linux": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/sandbox_${{ github.ref_name }}_linux.zip"
           }
           EOF
-          
+
       - name: Commit and Push to Main
         run: |
           git config user.name "github-actions[bot]"
@@ -41,17 +38,17 @@ jobs:
           git push origin main
 
   build-and-release:
-    needs: update-manifest # Wait for version.json to be pushed first
+    needs: update-manifest
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - os: windows-latest
-            appmanager_exe: AppManager.exe
+            installer_bin: Installer.exe
             sandbox_zip: sandbox_${{ github.ref_name }}_windows.zip
-          - os: ubuntu-20.04
-            appmanager_exe: AppManager
+          - os: ubuntu-22.04
+            installer_bin: Installer
             sandbox_zip: sandbox_${{ github.ref_name }}_linux.zip
 
     steps:
@@ -61,42 +58,53 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip libxcb-xinerama0
+
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install PyQt5 requests pyinstaller Pillow
 
-      - name: Build Windows Binaries
+      - name: Build Windows Packages
         if: matrix.os == 'windows-latest'
         run: |
-          # Dynamically convert icon.png to icon.ico for PyInstaller
           python -c "from PIL import Image; Image.open('assets/icon.png').save('assets/icon.ico')"
           
-          pyinstaller --noconfirm --onefile --windowed --icon="assets\icon.ico" --name "AppManager" launcher.py
+          # Build Installer
+          pyinstaller --noconfirm --onefile --windowed --icon="assets\icon.ico" --name "Installer" launcher.py
           
-          # Notice we bundle assets/icon.png into the root (.) of the app, so your code doesn't need to change!
+          # Build Core Sandbox
           pyinstaller --noconfirm --onedir --windowed --icon="assets\icon.ico" --name "Sandbox" --add-data "examples;examples" --add-data "bin;bin" --add-data "assets\icon.png;." src\main.py
           
+          # Compress Sandbox direct contents into zip
           Compress-Archive -Path "dist\Sandbox\*" -DestinationPath "${{ matrix.sandbox_zip }}" -Force
 
-      - name: Build Linux Binaries
-        if: matrix.os == 'ubuntu-20.04'
+      - name: Build Linux Packages
+        if: matrix.os == 'ubuntu-22.04'
         run: |
-          pyinstaller --noconfirm --onefile --windowed --icon="assets/icon.png" --name "AppManager" launcher.py
+          # Build Installer
+          pyinstaller --noconfirm --onefile --windowed --icon="assets/icon.png" --name "Installer" launcher.py
           
+          # Build Core Sandbox
           pyinstaller --noconfirm --onedir --name "Sandbox" --hidden-import=pkgutil --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtWidgets --add-data "examples:examples" --add-data "bin:bin" --add-data "assets/icon.png:." src/main.py
           
+          # Make binaries executable inside build
           find dist/Sandbox -type f \( -name "Sandbox" -o -name "iverilog" -o -name "vvp" -o -name "ivl" -o -name "ivlpp" \) -exec chmod +x {} +
           
+          # Compress Sandbox direct contents into zip
           cd dist/Sandbox
           zip -r ../../${{ matrix.sandbox_zip }} .
           cd ../..
 
       - name: Upload Binaries to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/${{ matrix.appmanager_exe }}
+            dist/${{ matrix.installer_bin }}
             ${{ matrix.sandbox_zip }}

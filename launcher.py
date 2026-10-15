@@ -242,10 +242,11 @@ class AppManagerWindow(QWidget):
             
             if sys.platform == "win32":
                 exe_path = os.path.join(app_dir, "Sandbox.exe")
+                # Using ASCII 'uP' prevents Windows VBScript encoding corruptions (ÂµP)
                 vbs_script = f"""
                 Set ws = WScript.CreateObject("WScript.Shell")
                 startMenu = ws.SpecialFolders("Programs")
-                Set link2 = ws.CreateShortcut(startMenu & "\\µP Verilog Sandbox.lnk")
+                Set link2 = ws.CreateShortcut(startMenu & "\\uP Verilog Sandbox.lnk")
                 link2.TargetPath = "{exe_path}"
                 link2.WorkingDirectory = "{app_dir}"
                 link2.IconLocation = "{exe_path},0"
@@ -254,7 +255,7 @@ class AppManagerWindow(QWidget):
                 if create_desktop:
                     vbs_script += f"""
                     desktop = ws.SpecialFolders("Desktop")
-                    Set link = ws.CreateShortcut(desktop & "\\µP Verilog Sandbox.lnk")
+                    Set link = ws.CreateShortcut(desktop & "\\uP Verilog Sandbox.lnk")
                     link.TargetPath = "{exe_path}"
                     link.WorkingDirectory = "{app_dir}"
                     link.IconLocation = "{exe_path},0"
@@ -264,14 +265,15 @@ class AppManagerWindow(QWidget):
                 with open(vbs_path, "w", encoding="utf-8") as f:
                     f.write(vbs_script)
                 subprocess.run(["cscript", "//Nologo", vbs_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                os.remove(vbs_path)
+                if os.path.exists(vbs_path):
+                    os.remove(vbs_path)
 
             else:
                 exe_path = os.path.join(app_dir, "Sandbox")
                 icon_path = os.path.join(app_dir, "icon.png")
                 
                 desktop_entry = f"""[Desktop Entry]
-Name=µP Verilog Sandbox
+Name=uP Verilog Sandbox
 Comment=Interactive Verilog Simulation Debugger
 Exec={exe_path}
 Icon={icon_path if os.path.exists(icon_path) else 'utilities-terminal'}
@@ -281,14 +283,14 @@ Categories=Development;Engineering;Electronics;
 """
                 apps_dir = os.path.expanduser("~/.local/share/applications")
                 os.makedirs(apps_dir, exist_ok=True)
-                with open(os.path.join(apps_dir, "verilog-sandbox.desktop"), "w") as f:
+                with open(os.path.join(apps_dir, "verilog-sandbox.desktop"), "w", encoding="utf-8") as f:
                     f.write(desktop_entry)
                 
                 if create_desktop:
                     desktop_dir = os.path.expanduser("~/Desktop")
                     if os.path.exists(desktop_dir):
                         desktop_file = os.path.join(desktop_dir, "verilog-sandbox.desktop")
-                        with open(desktop_file, "w") as f:
+                        with open(desktop_file, "w", encoding="utf-8") as f:
                             f.write(desktop_entry)
                         os.chmod(desktop_file, 0o755)
         except Exception as e:
@@ -297,10 +299,19 @@ Categories=Development;Engineering;Electronics;
     def remove_shortcuts(self):
         try:
             if sys.platform == "win32":
-                desktop_link = os.path.join(os.environ["USERPROFILE"], "Desktop", "µP Verilog Sandbox.lnk")
-                start_link = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "µP Verilog Sandbox.lnk")
-                if os.path.exists(desktop_link): os.remove(desktop_link)
-                if os.path.exists(start_link): os.remove(start_link)
+                desktop_link = os.path.join(os.environ["USERPROFILE"], "Desktop", "uP Verilog Sandbox.lnk")
+                start_link = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "uP Verilog Sandbox.lnk")
+                
+                # Clean up legacy corrupted encoding shortcut names if present
+                old_desktop_link = os.path.join(os.environ["USERPROFILE"], "Desktop", "µP Verilog Sandbox.lnk")
+                old_start_link = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "µP Verilog Sandbox.lnk")
+
+                for path in [desktop_link, start_link, old_desktop_link, old_start_link]:
+                    if os.path.exists(path):
+                        try:
+                            os.remove(path)
+                        except Exception:
+                            pass
             else:
                 desktop_link = os.path.expanduser("~/Desktop/verilog-sandbox.desktop")
                 app_link = os.path.expanduser("~/.local/share/applications/verilog-sandbox.desktop")

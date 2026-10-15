@@ -3,10 +3,10 @@ import os
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QSplitter, QComboBox, QPushButton, QLabel, QFileDialog, QStackedWidget,
-    QFrame, QMessageBox
+    QFrame, QMessageBox, QDialog, QListWidget
 )
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QFont
+from PyQt5.QtCore import Qt, QTimer, QUrl
+from PyQt5.QtGui import QFont, QDesktopServices
 
 # Import all module views
 from dip_hex_io import DipHexIOView
@@ -18,6 +18,7 @@ from slider import SliderADCView
 from gauge import GaugeADCView
 from mouse_dir import MouseDirectionView
 from string_input import StringInputView
+from memory_region import MemoryRegionView
 from console_log import ConsoleLogView
 
 # Import the Dynamic Simulation Backend Engine
@@ -60,12 +61,12 @@ QPushButton:pressed {
     background-color: #CCE4F7;
     border: 1px solid #005499;
 }
-/* Kakooii Circular Help Button */
+/* Pane's help button */
 QPushButton#HelpBtn {
     background-color: #EFEFEF;
     border: 2px solid #ADADAD;
     border-bottom: 3px solid #888888;
-    border-radius: 13px; /* Perfectly circular */
+    border-radius: 13px;
     font-weight: 900;
     color: #555555;
     font-size: 14px;
@@ -90,13 +91,23 @@ QPushButton#FileBtn {
 QPushButton#FileBtn:hover {
     background-color: #1084D0;
 }
-QPushButton#ResetBtn {
-    background-color: #D13438;
-    color: white;
-    border: 1px solid #A80000;
+/* Top help button*/
+QPushButton#GlobalHelpBtn {
+    background-color: #FADBD8;
+    border: 3px solid #D98880;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 16px;
+    color: #333333;
+    padding: 4px 8px;
 }
-QPushButton#ResetBtn:hover {
-    background-color: #E81123;
+QPushButton#GlobalHelpBtn:hover {
+    background-color: #F5B7B1;
+    border: 3px solid #C0392B;
+}
+QPushButton#GlobalHelpBtn:pressed {
+    background-color: #E6B0AA;
+    border: 3px solid #A93226;
 }
 QPushButton#LeverBtn {
     background-color: #E1E1E1;
@@ -134,7 +145,138 @@ QSplitter::handle {
 QSplitter::handle:hover {
     background-color: #0078D7;
 }
+QPushButton#ExampleBtn {
+    background-color: #E1E1E1;
+    border: 3px solid #999999;
+    border-radius: 4px;
+    font-weight: bold;
+    color: #333333;
+    padding: 4px 8px;
+}
+QPushButton#ExampleBtn:hover {
+    background-color: #E5F1FB;
+    border: 3px solid #0078D7;
+}
+QPushButton#ExampleBtn:pressed {
+    background-color: #CCE4F7;
+    border: 3px solid #005499;
+}
+/* Example Selector Dialog */
+QDialog {
+    background-color: #F0F0F0;
+}
+QLabel#DialogHeader {
+    font-weight: bold;
+    font-size: 15px;
+    color: #333333;
+}
+QListWidget#ExampleList {
+    background-color: #FFFFFF;
+    border: 2px solid #ADADAD;
+    border-radius: 6px;
+    font-family: 'Consolas', 'Segoe UI', monospace;
+    font-size: 15px;
+    padding: 6px;
+}
+QListWidget#ExampleList::item {
+    padding: 10px 14px;
+    border-bottom: 1px solid #EAEAEA;
+    color: #222222;
+}
+QListWidget#ExampleList::item:hover {
+    background-color: #E5F1FB;
+    color: #0078D7;
+}
+QListWidget#ExampleList::item:selected {
+    background-color: #0078D7;
+    color: #FFFFFF;
+    font-weight: bold;
+}
+QPushButton#DialogCancelBtn {
+    font-size: 14px;
+    padding: 6px 16px;
+}
+QPushButton#DialogLoadBtn {
+    background-color: #0078D7;
+    color: white;
+    border: 1px solid #005A9E;
+    font-size: 14px;
+    padding: 6px 18px;
+}
+QPushButton#DialogLoadBtn:hover {
+    background-color: #1084D0;
+}
 """
+
+# =============================================================================
+# EXAMPLE SELECTOR DIALOG
+# =============================================================================
+class ExampleSelectorDialog(QDialog):
+    def __init__(self, example_dir, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Verilog Example")
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.resize(460, 540)
+        self.selected_file_path = None
+        self.example_dir = example_dir
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        # Section Header Label
+        lbl = QLabel("Choose an example circuit:")
+        lbl.setObjectName("DialogHeader")
+        layout.addWidget(lbl)
+
+        # Monospace List Widget
+        self.list_widget = QListWidget()
+        self.list_widget.setObjectName("ExampleList")
+        layout.addWidget(self.list_widget)
+
+        # Action Buttons
+        btn_box = QHBoxLayout()
+        
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.setObjectName("DialogCancelBtn")
+        btn_cancel.setMinimumHeight(38)
+        btn_cancel.clicked.connect(self.reject)
+
+        self.btn_load = QPushButton("Load Example")
+        self.btn_load.setObjectName("DialogLoadBtn")
+        self.btn_load.setMinimumHeight(38)
+        self.btn_load.clicked.connect(self.accept_selection)
+
+        btn_box.addStretch()
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(self.btn_load)
+        layout.addLayout(btn_box)
+
+        # Populate examples AFTER self.btn_load is instantiated
+        self.file_map = {}
+        self.populate_examples()
+
+        self.list_widget.itemDoubleClicked.connect(self.accept_selection)
+
+    def populate_examples(self):
+        if os.path.exists(self.example_dir):
+            files = [f for f in os.listdir(self.example_dir) if f.endswith('.v')]
+            files.sort()
+            for f in files:
+                clean_name = f[:-2] if f.endswith('.v') else f
+                self.file_map[clean_name] = os.path.join(self.example_dir, f)
+                self.list_widget.addItem(clean_name)
+        
+        if self.list_widget.count() == 0:
+            self.list_widget.addItem("No example files found")
+            self.btn_load.setEnabled(False)
+
+    def accept_selection(self):
+        current_item = self.list_widget.currentItem()
+        if current_item and current_item.text() in self.file_map:
+            self.selected_file_path = self.file_map[current_item.text()]
+            self.accept()
+
 
 # =============================================================================
 # DYNAMIC PANE WIDGET (Left & Right Split)
@@ -168,8 +310,9 @@ class SandboxPane(QFrame):
             "Slider ADC In",         # 6
             "Gauge ADC Out",         # 7
             "Mouse dir In",          # 8
-            "String In",          # 8
-            "Console Log"            # 9
+            "String In",             # 9
+            "Memory Region",         # 10
+            "Console Log"            # 11
         ])
         self.tool_selector.currentIndexChanged.connect(self.switch_tool)
         
@@ -210,23 +353,27 @@ class SandboxPane(QFrame):
         self.keypad = ProgrammableKeypadView()
         self.stack.addWidget(self.keypad)
 
-        # Slider pane
+        # 6: Slider pane
         self.slider_adc = SliderADCView()
         self.stack.addWidget(self.slider_adc)
 
-        # Gauge pane
+        # 7: Gauge pane
         self.gauge_adc = GaugeADCView()
         self.stack.addWidget(self.gauge_adc)
 
-        # Mouse dir pane
+        # 8: Mouse dir pane
         self.mouse_sensor = MouseDirectionView()
         self.stack.addWidget(self.mouse_sensor)
 
-        # String Input
+        # 9: String Input
         self.string_input = StringInputView()
         self.stack.addWidget(self.string_input)
 
-        # Console Log
+        # 10: Memory Region
+        self.memory_region = MemoryRegionView()
+        self.stack.addWidget(self.memory_region)
+
+        # 11: Console Log
         self.console_log = ConsoleLogView()
         self.stack.addWidget(self.console_log)
 
@@ -269,7 +416,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.clock_timer.timeout.connect(lambda: self.engine.send_command('clk', 1))
         
         # --- UI TO ENGINE SIGNAL BINDINGS ---
-        # Fixed port bindings (trigged when DIP switch values change)
+        # Fixed port bindings (triggered when DIP switch values change)
         self.left_pane.dip_io.byte_a.value_changed.connect(lambda v: self.engine.send_command('port_a', v))
         self.left_pane.dip_io.byte_b.value_changed.connect(lambda v: self.engine.send_command('port_b', v))
         self.right_pane.dip_io.byte_a.value_changed.connect(lambda v: self.engine.send_command('port_a', v))
@@ -288,10 +435,8 @@ class UnifiedSandboxIDE(QMainWindow):
         self.left_pane.mouse_sensor.mouse_updated.connect(self.engine.send_command)
         self.right_pane.mouse_sensor.mouse_updated.connect(self.engine.send_command)
 
-        # Global Control Controls
+        # Global Clock Controls
         self.btn_pulse.clicked.connect(lambda: self.engine.send_command('clk', 1))
-        self.btn_reset.pressed.connect(lambda: self.engine.send_command('rst', 1))
-        self.btn_reset.released.connect(lambda: self.engine.send_command('rst', 0))
 
     def broadcast_log(self, message, level="INFO"):
         """Broadcasts simulation logs to both left and right console panes."""
@@ -312,16 +457,35 @@ class UnifiedSandboxIDE(QMainWindow):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(15, 10, 15, 10)
         
-        # -- File Selection (160px width for clean visibility)
+        # -- File Selection & Example Browser
         self.btn_select_file = QPushButton("Load Target .v")
         self.btn_select_file.setObjectName("FileBtn")
-        self.btn_select_file.setFixedSize(160, 35)
+        self.btn_select_file.setFixedSize(140, 35)
         self.btn_select_file.clicked.connect(self.select_file)
         
+        # Small bold vertical separator bar
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Plain)
+        separator.setLineWidth(2)
+        separator.setFixedHeight(26)
+        separator.setStyleSheet("background-color: #888888; border: none;")
+
+        # Get Example Button
+        self.btn_get_example = QPushButton("Get Example")
+        self.btn_get_example.setObjectName("ExampleBtn")
+        self.btn_get_example.setFixedSize(140, 35)
+        self.btn_get_example.clicked.connect(self.open_example_dialog)
+
         self.lbl_file = QLabel("No File Selected")
         self.lbl_file.setStyleSheet("color: #666666; font-family: monospace;")
         
         header_layout.addWidget(self.btn_select_file)
+        header_layout.addSpacing(6)
+        header_layout.addWidget(separator)
+        header_layout.addSpacing(6)
+        header_layout.addWidget(self.btn_get_example)
+        header_layout.addSpacing(12)
         header_layout.addWidget(self.lbl_file)
         
         # Spacer to push clock controls to the right
@@ -355,11 +519,14 @@ class UnifiedSandboxIDE(QMainWindow):
 
         header_layout.addSpacing(20)
 
-        # -- Global Reset (135px width for clean visibility)
-        self.btn_reset = QPushButton("GLOBAL RST")
-        self.btn_reset.setObjectName("ResetBtn")
-        self.btn_reset.setFixedSize(135, 35)
-        header_layout.addWidget(self.btn_reset)
+        # -- Web Documentation Help Button
+        self.btn_help_link = QPushButton("?  (Help)")
+        self.btn_help_link.setObjectName("GlobalHelpBtn")
+        self.btn_help_link.setFixedSize(110, 35)
+        self.btn_help_link.setCursor(Qt.PointingHandCursor)
+        self.btn_help_link.setToolTip("Open Online Documentation & User Guide")
+        self.btn_help_link.clicked.connect(self.open_help_webpage)
+        header_layout.addWidget(self.btn_help_link)
 
         main_layout.addWidget(header)
 
@@ -374,8 +541,8 @@ class UnifiedSandboxIDE(QMainWindow):
         self.right_pane = SandboxPane()
         
         # --- INITIAL CONFIGURATION ON STARTUP ---
-        self.left_pane.tool_selector.setCurrentIndex(10)  # Console Log
-        self.right_pane.tool_selector.setCurrentIndex(0) # Empty Workspace
+        self.left_pane.tool_selector.setCurrentIndex(11) # Console Log
+        self.right_pane.tool_selector.setCurrentIndex(0)  # Empty Workspace
         
         self.splitter.addWidget(self.left_pane)
         self.splitter.addWidget(self.right_pane)
@@ -405,8 +572,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.left_pane.register_monitor.set_available_signals(parsed['internals'])
         self.right_pane.register_monitor.set_available_signals(parsed['internals'])
         
-        # Supply data to Displays
-
+        # Supply data to Displays and Sensors
         self.left_pane.slider_adc.set_available_inputs(parsed['inputs'])
         self.right_pane.slider_adc.set_available_inputs(parsed['inputs'])
 
@@ -434,11 +600,15 @@ class UnifiedSandboxIDE(QMainWindow):
         self.left_pane.register_monitor.sync_data(state_dict)
         self.right_pane.register_monitor.sync_data(state_dict)
         
-        # Update OLED Displays <-- Added routing here
+        # Update OLED Displays
         self.left_pane.char_display.update_values(state_dict)
         self.right_pane.char_display.update_values(state_dict)
 
         self.left_pane.gauge_adc.update_values(state_dict)
+
+        # Sync Memory Region on every PULSE / AUTO tick
+        self.left_pane.memory_region.sync_data(state_dict)
+        self.right_pane.memory_region.sync_data(state_dict)
 
     def toggle_clock_mode(self, is_auto):
         if is_auto:
@@ -454,6 +624,9 @@ class UnifiedSandboxIDE(QMainWindow):
             
             self.left_pane.console_log.log_message("Clock Engine switched to AUTO mode.", "INFO")
             self.right_pane.console_log.log_message("Clock Engine switched to AUTO mode.", "INFO")
+
+            self.left_pane.mouse_sensor.set_auto_clock(True)
+            self.right_pane.mouse_sensor.set_auto_clock(True)
         else:
             self.btn_lever.setText("MANUAL")
             self.btn_pulse.setEnabled(True)
@@ -465,13 +638,72 @@ class UnifiedSandboxIDE(QMainWindow):
             self.left_pane.console_log.log_message("Clock Engine switched to MANUAL mode.", "INFO")
             self.right_pane.console_log.log_message("Clock Engine switched to MANUAL mode.", "INFO")
 
+            self.left_pane.mouse_sensor.set_auto_clock(False)
+            self.right_pane.mouse_sensor.set_auto_clock(False)
+
     def update_clock_frequency(self):
         """Dynamically updates the clock speed if AUTO mode is currently active."""
         if self.clock_timer.isActive():
             freq_map = {0: 1000, 1: 250, 2: 62, 3: 4, 4: 1, 5: 1}
             interval = freq_map.get(self.combo_freq.currentIndex(), 1000)
-            self.clock_timer.start(interval) # Calling start() again safely restarts it with the new interval
+            self.clock_timer.start(interval)
+
+    def open_help_webpage(self):
+        """Opens the documentation webpage in the system's default browser."""
+        url = QUrl("https://github.com")  # Replace with actual documentation/wiki URL
+        QDesktopServices.openUrl(url)
+
+    def get_examples_directory(self):
+        """Locates the examples directory across project root, src, and packaged environments."""
+        if getattr(sys, 'frozen', False):
+            # Deployed PyInstaller executable environment
+            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+            exe_dir = os.path.dirname(sys.executable)
+            possible_paths = [
+                os.path.join(base_dir, "_internal", "examples"),
+                os.path.join(exe_dir, "_internal", "examples"),
+                os.path.join(base_dir, "examples"),
+                os.path.join(exe_dir, "examples")
+            ]
+        else:
+            # Development environment
+            src_dir = os.path.dirname(os.path.abspath(__file__))          # .../src
+            root_dir = os.path.dirname(src_dir)                           # .../PRARAMBH-Sandbox
+            cwd = os.getcwd()
+
+            possible_paths = [
+                os.path.join(root_dir, "examples"),                       # Root /examples
+                os.path.join(src_dir, "examples"),                        # src/examples
+                os.path.join(cwd, "examples"),                            # CWD /examples
+                os.path.join(root_dir, "_internal", "examples"),
+                os.path.join(src_dir, "_internal", "examples")
+            ]
+
+        for path in possible_paths:
+            if os.path.exists(path):
+                v_files = [f for f in os.listdir(path) if f.endswith('.v')]
+                if v_files:
+                    return path
+
+        fallback = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
+        os.makedirs(fallback, exist_ok=True)
+        return fallback
+
+    def open_example_dialog(self):
+        """Opens example picker dialog and compiles selected Verilog target."""
+        example_dir = self.get_examples_directory()
+        dialog = ExampleSelectorDialog(example_dir, self)
+        
+        if dialog.exec_() == QDialog.Accepted and dialog.selected_file_path:
+            self.target_verilog_file = dialog.selected_file_path
+            filename = os.path.basename(dialog.selected_file_path)
+            self.lbl_file.setText(f"Target: {filename}")
+            self.lbl_file.setStyleSheet("color: #005A9E; font-family: monospace; font-weight: bold;")
             
+            # Start dynamic AST introspection & compile process
+            self.engine.compile_and_run(dialog.selected_file_path)
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
