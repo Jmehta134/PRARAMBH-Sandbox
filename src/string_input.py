@@ -26,26 +26,6 @@ class StringInputView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        # --- Pane Header ---
-        title = QLabel("STRING & ASCII INPUT INJECTOR")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 18px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 2px;
-        """)
-        
-        subtitle = QLabel("Inject raw ASCII strings directly into Verilog input buses")
-        subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setStyleSheet("color: #666666; font-size: 12px; font-style: italic; margin-bottom: 4px;")
-        
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.setSpacing(30)
-
-        # --- Expanded Kakkoii Frame Panel ---
         panel_frame = QFrame()
         panel_frame.setStyleSheet("""
             QFrame {
@@ -171,6 +151,12 @@ class StringInputView(QWidget):
 
         # Allow panel to consume full pane width
         layout.addWidget(panel_frame)
+
+        subtitle = QLabel("Inject raw ASCII strings directly into Verilog input buses")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("color: #666666; font-size: 14px; font-style: italic; margin-bottom: 4px;")
+        layout.addWidget(subtitle)
+        
         layout.addStretch()
 
     def set_available_inputs(self, inputs_list):

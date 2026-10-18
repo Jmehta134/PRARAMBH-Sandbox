@@ -144,17 +144,6 @@ class GaugeADCView(QWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
 
-        # --- Header ---
-        title = QLabel("GAUGE ADC (ANALOG OUTPUT)")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 18px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 5px;
-        """)
-        self.layout.addWidget(title)
         self.layout.addSpacing(10)
 
         content_vbox = QVBoxLayout()

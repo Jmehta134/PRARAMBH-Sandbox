@@ -29,7 +29,7 @@ class DipSwitch(QPushButton):
                 border-radius: 4px;
                 color: #666666;
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 18px;
                 padding-top: 32px; 
             }
             QPushButton:hover { border: 2px solid #888888; }
@@ -42,7 +42,7 @@ class DipSwitch(QPushButton):
                 border-radius: 4px;
                 color: white;
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 18px;
                 padding-bottom: 32px; 
             }
             QPushButton:hover { background-color: #1084D0; }
@@ -106,7 +106,7 @@ class ByteControl(QGroupBox):
                 border-radius: 8px;
                 margin-top: 14px;
                 padding-top: 20px;
-                font-size: 13px;
+                font-size: 16px;
                 letter-spacing: 1px;
             }
             QGroupBox::title {
@@ -135,7 +135,7 @@ class ByteControl(QGroupBox):
             bit_label = QLabel(f"b{i}")
             bit_label.setAlignment(Qt.AlignCenter)
             # Upgraded bit label typography for high contrast & clarity
-            bit_label.setStyleSheet("color: #333333; font-size: 12px; font-weight: bold;")
+            bit_label.setStyleSheet("color: #333333; font-size: 16px; font-weight: bold;")
             
             bit_layout.addWidget(bit_label)
             bit_layout.addWidget(sw)
@@ -211,7 +211,7 @@ class DipHexIOView(QWidget):
             lbl = QLabel(f"O{i}")
             lbl.setAlignment(Qt.AlignCenter)
             # Matching prominent typography for output bit labels
-            lbl.setStyleSheet("color: #333333; font-size: 12px; font-weight: bold;")
+            lbl.setStyleSheet("color: #333333; font-size: 16px; font-weight: bold;")
             
             led = VirtualLED()
             self.leds.append(led)

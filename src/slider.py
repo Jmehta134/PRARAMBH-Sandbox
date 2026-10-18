@@ -15,18 +15,7 @@ class SliderADCView(QWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
 
-        # --- Standardized Pane Header (Pinned to Top) ---
-        title = QLabel("SLIDER ADC (ANALOG INPUT)")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 18px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 5px;
-        """)
-        self.layout.addWidget(title)
-        self.layout.addSpacing(15)
+        self.layout.addSpacing(10)
 
         # Content Wrapper to center the UI elements vertically
         content_vbox = QVBoxLayout()

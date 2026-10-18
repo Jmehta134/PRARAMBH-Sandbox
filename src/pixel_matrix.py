@@ -6,20 +6,8 @@ class PixelMatrixView(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(10)
-        
-        # Professional Header Label (Matched size and weight)
-        title = QLabel("16x16 HARDWARE LED MATRIX PANEL")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 18px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 5px;
-        """)
-        layout.addWidget(title)
         
         # Recessed Bezel Frame for the Matrix Board
         bezel = QFrame()
@@ -33,13 +21,13 @@ class PixelMatrixView(QWidget):
         
         grid = QGridLayout(bezel)
         grid.setSpacing(4)  # Clean gap between physical LEDs
-        grid.setContentsMargins(15, 15, 15, 15)
+        grid.setContentsMargins(8, 8, 8, 8)
         
         self.pixels = {}
         for y in range(16):
             for x in range(16):
                 px = QFrame()
-                px.setFixedSize(26, 26)  # Significantly larger pixels for high visibility
+                px.setFixedSize(32, 32)  # Significantly larger pixels for high visibility
                 self.set_pixel_style(px, False)
                 grid.addWidget(px, y, x)
                 self.pixels[(x, y)] = px

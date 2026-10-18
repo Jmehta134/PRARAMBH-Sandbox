@@ -84,17 +84,6 @@ class MouseDirectionView(QWidget):
         super().__init__()
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
-
-        title = QLabel("HARDWARE MOUSE SENSOR PANEL")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 18px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 5px;
-        """)
-        self.layout.addWidget(title)
         
         self.layout.addStretch(1)
 

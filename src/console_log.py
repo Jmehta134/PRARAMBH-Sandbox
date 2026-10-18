@@ -11,20 +11,9 @@ class ConsoleLogView(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(12)
         
-        # Professional Header Label (Matching other modules)
-        title = QLabel("SYSTEM CONSOLE & SIMULATION LOG")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 18px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 5px;
-        """)
-        layout.addWidget(title)
         
         # Terminal Container Frame
         terminal_frame = QFrame()
@@ -42,7 +31,7 @@ class ConsoleLogView(QWidget):
         # Console Text Area (Monospace, read-only terminal look)
         self.console_box = QTextEdit()
         self.console_box.setReadOnly(True)
-        self.console_box.setFont(QFont("Consolas", 11))
+        self.console_box.setFont(QFont("Consolas", 10))
         self.console_box.setStyleSheet("""
             QTextEdit {
                 background-color: #141414;
@@ -59,10 +48,10 @@ class ConsoleLogView(QWidget):
         
         self.auto_scroll_cb = QCheckBox("Auto-scroll")
         self.auto_scroll_cb.setChecked(True)
-        self.auto_scroll_cb.setStyleSheet("color: #AAAAAA; font-size: 12px; font-weight: bold;")
+        self.auto_scroll_cb.setStyleSheet("color: #AAAAAA; font-size: 14px; font-weight: bold;")
         
         self.btn_clear = QPushButton("Clear Console")
-        self.btn_clear.setFixedSize(110, 30)
+        self.btn_clear.setFixedSize(125, 30)
         self.btn_clear.setStyleSheet("""
             QPushButton {
                 background-color: #2D2D30;
@@ -70,7 +59,7 @@ class ConsoleLogView(QWidget):
                 border: 1px solid #555555;
                 border-radius: 4px;
                 font-weight: bold;
-                font-size: 11px;
+                font-size: 14px;
             }
             QPushButton:hover { background-color: #3E3E42; color: white; border-color: #0078D7; }
         """)

@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>PRARAMBH Hardware Block Builder</title>
+  
+  <script src="https://unpkg.com/blockly/blockly_compressed.js"></script>
+  <script src="https://unpkg.com/blockly/blocks_compressed.js"></script>
+  <script src="https://unpkg.com/blockly/msg/en.js"></script>
+
+  <style>
+    html, body {
+      height: 100%; width: 100%; margin: 0; padding: 0;
+      background-color: #1E1E1E; overflow: hidden;
+      font-family: 'Consolas', monospace;
+    }
+    #blocklyDiv { height: 100%; width: 100%; }
+    .blocklyToolboxDiv * { font-size: 22px !important; }
+    .blocklyToolboxDiv .blocklyTreeLabel, span.blocklyTreeLabel {
+      font-family: 'Segoe UI', Arial, sans-serif !important;
+      font-weight: bold !important; letter-spacing: 0.5px !important;
+      padding-left: 10px !important; color: #E0E0E0 !important;
+    }
+    .blocklyTreeRow { height: 55px !important; line-height: 55px !important; margin-bottom: 6px !important; }
+    .blocklyToolboxContents { padding-top: 10px !important; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: #1E1E1E; }
+    ::-webkit-scrollbar-thumb { background: #4E4E52; border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: #00E5FF; }
+  </style>
+</head>
+<body>
+
+  <div id="blocklyDiv"></div>
+
+  <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+    <category name="Module & Ports" colour="#00E5FF">
+      <block type="verilog_module"></block>
+      <block type="verilog_port"></block>
+      <block type="verilog_signal"></block>
+      <block type="verilog_comment"></block>
+    </category>
+    <category name="Sequential (always)" colour="#00FF00">
+      <block type="verilog_always_ff"></block>
+      <block type="verilog_always_comb"></block>
+    </category>
+    <category name="Assignments" colour="#FFB74D">
+      <block type="verilog_nonblocking_assign"></block>
+      <block type="verilog_blocking_assign"></block>
+      <block type="verilog_assign"></block>
+    </category>
+    <category name="Control Logic" colour="#FF5252">
+      <block type="verilog_if"></block>
+      <block type="verilog_case"></block>
+      <block type="verilog_case_item"></block>
+      <block type="verilog_default"></block>
+      <block type="verilog_for"></block>
+    </category>
+    <category name="Gates & Math" colour="#B39DDB">
+      <block type="verilog_binop"></block>
+      <block type="verilog_unop"></block>
+      <block type="verilog_mux"></block>
+      <block type="verilog_slice"></block>
+      <block type="verilog_concat"></block>
+    </category>
+    <category name="Literals & Values" colour="#FFD54F">
+      <block type="verilog_numeric"></block>
+    </category>
+    <category name="Testbench (Sim)" colour="#FF8C00">
+      <block type="verilog_initial"></block>
+      <block type="verilog_delay"></block>
+      <block type="verilog_display"></block>
+      <block type="verilog_monitor"></block>
+    </category>
+    <category name="Sub-Modules" colour="#E040FB">
+      <block type="verilog_instantiate"></block>
+    </category>
+  </xml>
+
+  <script>
+    if (!Element.prototype.replaceChildren) {
+      Element.prototype.replaceChildren = function() {
+        while (this.firstChild) { this.removeChild(this.firstChild); }
+        for (var i = 0; i < arguments.length; i++) {
+          var arg = arguments[i];
+          if (typeof arg === 'string') { this.appendChild(document.createTextNode(arg)); }
+          else if (arg) { this.appendChild(arg); }
+        }
+      };
+    }
+
+    // --- Block Definitions ---
+    Blockly.Blocks['verilog_module'] = {
+      init: function() {
+        this.appendDummyInput().appendField("module").appendField(new Blockly.FieldTextInput("top_module"), "NAME");
+        this.appendStatementInput("DECLARATIONS").setCheck(["verilog_port", "verilog_comment"]).appendField("Ports & Declarations");
+        this.appendStatementInput("BODY").appendField("Module Logic");
+        this.setColour("#00E5FF");
+      }
+    };
+
+    Blockly.Blocks['verilog_port'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField(new Blockly.FieldDropdown([
+              ["input wire", "input wire"], ["input", "input"],
+              ["output wire", "output wire"], ["output reg", "output reg"],
+              ["output", "output"], ["inout wire", "inout wire"],
+              ["wire (internal)", "wire"], ["reg (internal)", "reg"],
+              ["parameter", "parameter"], ["localparam", "localparam"],
+              ["integer", "integer"]
+            ]), "DIR_TYPE")
+            .appendField("width")
+            .appendField(new Blockly.FieldDropdown([
+              ["1-bit", "1"], ["2-bit [1:0]", "2"], ["4-bit [3:0]", "4"],
+              ["8-bit [7:0]", "8"], ["16-bit [15:0]", "16"], ["32-bit [31:0]", "32"]
+            ]), "WIDTH")
+            .appendField("name")
+            .appendField(new Blockly.FieldTextInput("sig"), "NAME")
+            .appendField("= init")
+            .appendField(new Blockly.FieldTextInput(""), "INIT_VAL");
+        this.setPreviousStatement(true, ["verilog_port", "verilog_comment"]);
+        this.setNextStatement(true, ["verilog_port", "verilog_comment"]);
+        this.setColour("#4DB6AC");
+      }
+    };
+
+    Blockly.Blocks['verilog_comment'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("//")
+            .appendField(new Blockly.FieldTextInput("Note / comment for readability"), "TEXT");
+        this.setPreviousStatement(true, ["verilog_port", "verilog_comment", "verilog_case_item", "verilog_default"]);
+        this.setNextStatement(true, ["verilog_port", "verilog_comment", "verilog_case_item", "verilog_default"]);
+        this.setColour("#78909C");
+      }
+    };
+
+    Blockly.Blocks['verilog_always_ff'] = {
+      init: function() {
+        this.appendDummyInput().appendField("always @(posedge").appendField(new Blockly.FieldTextInput("clk"), "CLK").appendField("or posedge").appendField(new Blockly.FieldTextInput("rst"), "RST").appendField(")");
+        this.appendStatementInput("DO").appendField("begin");
+        this.appendDummyInput().appendField("end");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#00FF00");
+      }
+    };
+
+    Blockly.Blocks['verilog_always_comb'] = {
+      init: function() {
+        this.appendDummyInput().appendField("always @(*)");
+        this.appendStatementInput("DO").appendField("begin");
+        this.appendDummyInput().appendField("end");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#00FF00");
+      }
+    };
+
+    Blockly.Blocks['verilog_nonblocking_assign'] = {
+      init: function() {
+        this.appendValueInput("LHS");
+        this.appendValueInput("RHS").appendField("<=");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FFB74D");
+      }
+    };
+
+    Blockly.Blocks['verilog_blocking_assign'] = {
+      init: function() {
+        this.appendValueInput("LHS");
+        this.appendValueInput("RHS").appendField("=");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FFB74D");
+      }
+    };
+
+    Blockly.Blocks['verilog_assign'] = {
+      init: function() {
+        this.appendValueInput("LHS").appendField("assign");
+        this.appendValueInput("RHS").appendField("=");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FFB74D");
+      }
+    };
+
+    Blockly.Blocks['verilog_if'] = {
+      init: function() {
+        this.appendValueInput("COND").appendField("if (");
+        this.appendDummyInput().appendField(")");
+        this.appendStatementInput("THEN").appendField("begin");
+        this.appendStatementInput("ELSE").appendField("end else begin");
+        this.appendDummyInput().appendField("end");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FF5252");
+      }
+    };
+
+    Blockly.Blocks['verilog_case'] = {
+      init: function() {
+        this.appendValueInput("EXPR").appendField("case (");
+        this.appendDummyInput().appendField(")");
+        this.appendStatementInput("CASES").setCheck(["verilog_case_item", "verilog_default", "verilog_comment"]).appendField("items");
+        this.appendDummyInput().appendField("endcase");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FF5252");
+      }
+    };
+
+    Blockly.Blocks['verilog_case_item'] = {
+      init: function() {
+        this.appendValueInput("VAL").appendField("item");
+        this.appendStatementInput("DO").appendField(":");
+        this.setPreviousStatement(true, ["verilog_case_item", "verilog_default", "verilog_comment"]);
+        this.setNextStatement(true, ["verilog_case_item", "verilog_default", "verilog_comment"]);
+        this.setColour("#FF5252");
+      }
+    };
+
+    Blockly.Blocks['verilog_default'] = {
+      init: function() {
+        this.appendDummyInput().appendField("default:");
+        this.appendStatementInput("DO");
+        this.setPreviousStatement(true, ["verilog_case_item", "verilog_default", "verilog_comment"]);
+        this.setNextStatement(true, ["verilog_case_item", "verilog_default", "verilog_comment"]);
+        this.setColour("#FF5252");
+      }
+    };
+
+    Blockly.Blocks['verilog_for'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("for (")
+            .appendField(new Blockly.FieldTextInput("i=0; i<16; i=i+1"), "COND")
+            .appendField(")");
+        this.appendStatementInput("DO").appendField("begin");
+        this.appendDummyInput().appendField("end");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FF5252");
+      }
+    };
+
+    Blockly.Blocks['verilog_signal'] = {
+      init: function() {
+        this.appendDummyInput().appendField(new Blockly.FieldTextInput("sig"), "SIG");
+        this.setOutput(true, null);
+        this.setColour("#4DB6AC");
+      }
+    };
+
+    Blockly.Blocks['verilog_binop'] = {
+      init: function() {
+        this.appendValueInput("A");
+        this.appendDummyInput().appendField(new Blockly.FieldDropdown([
+          ["& (AND)", "&"], ["| (OR)", "|"], ["^ (XOR)", "^"],
+          ["+ (ADD)", "+"], ["- (SUB)", "-"], ["* (MUL)", "*"], ["/ (DIV)", "/"],
+          ["== (EQ)", "=="], ["!= (NEQ)", "!="], ["< (LT)", "<"], ["<= (LTE)", "<="],
+          ["> (GT)", ">"], [">= (GTE)", ">="], ["<< (SHL)", "<<"], [">> (SHR)", ">>"],
+          ["&& (LOGICAL AND)", "&&"], ["|| (LOGICAL OR)", "||"]
+        ]), "OP");
+        this.appendValueInput("B");
+        this.setInputsInline(true);
+        this.setOutput(true, null);
+        this.setColour("#B39DDB");
+      }
+    };
+
+    Blockly.Blocks['verilog_unop'] = {
+      init: function() {
+        this.appendDummyInput().appendField(new Blockly.FieldDropdown([
+          ["~ (NOT)", "~"], ["! (LOGICAL NOT)", "!"], ["& (RED AND)", "&"], ["| (RED OR)", "|"]
+        ]), "OP");
+        this.appendValueInput("A");
+        this.setInputsInline(true);
+        this.setOutput(true, null);
+        this.setColour("#B39DDB");
+      }
+    };
+
+    Blockly.Blocks['verilog_mux'] = {
+      init: function() {
+        this.appendValueInput("SEL").appendField("MUX: (");
+        this.appendValueInput("IN1").appendField(") ?");
+        this.appendValueInput("IN0").appendField(":");
+        this.setInputsInline(true);
+        this.setOutput(true, null);
+        this.setColour("#B39DDB");
+      }
+    };
+
+    Blockly.Blocks['verilog_slice'] = {
+      init: function() {
+        this.appendValueInput("SIG");
+        this.appendDummyInput().appendField("[").appendField(new Blockly.FieldTextInput("7"), "MSB").appendField(":").appendField(new Blockly.FieldTextInput("0"), "LSB").appendField("]");
+        this.setInputsInline(true);
+        this.setOutput(true, null);
+        this.setColour("#B39DDB");
+      }
+    };
+
+    Blockly.Blocks['verilog_concat'] = {
+      init: function() {
+        this.appendValueInput("A").appendField("Concat {");
+        this.appendValueInput("B").appendField(",");
+        this.appendDummyInput().appendField("}");
+        this.setInputsInline(true);
+        this.setOutput(true, null);
+        this.setColour("#B39DDB");
+      }
+    };
+
+    // Backward-compatibility alias
+    Blockly.Blocks['verilog_constant'] = {
+      init: function() {
+        this.appendDummyInput().appendField("val:").appendField(new Blockly.FieldTextInput("1'b0"), "VAL");
+        this.setOutput(true, null);
+        this.setColour("#FFD54F");
+      }
+    };
+
+    Blockly.Blocks['verilog_numeric'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("val:")
+            .appendField(new Blockly.FieldTextInput("8"), "WIDTH")
+            .appendField("'")
+            .appendField(new Blockly.FieldDropdown([
+              ["Hex (h)", "h"], ["Decimal (d)", "d"], ["Binary (b)", "b"]
+            ]), "BASE")
+            .appendField(new Blockly.FieldTextInput("0"), "VAL");
+        this.setOutput(true, null);
+        this.setColour("#FFD54F");
+      }
+    };
+
+    Blockly.Blocks['verilog_initial'] = {
+      init: function() {
+        this.appendDummyInput().appendField("initial");
+        this.appendStatementInput("DO").appendField("begin");
+        this.appendDummyInput().appendField("end");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FF8C00");
+      }
+    };
+
+    Blockly.Blocks['verilog_delay'] = {
+      init: function() {
+        this.appendDummyInput().appendField("#").appendField(new Blockly.FieldTextInput("10"), "DELAY").appendField("; (Delay)");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FF8C00");
+      }
+    };
+
+    Blockly.Blocks['verilog_display'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("$display(\"")
+            .appendField(new Blockly.FieldTextInput("Time: %0t, Val: %b"), "FORMAT")
+            .appendField("\", ")
+            .appendField(new Blockly.FieldTextInput("$time, sig"), "ARGS")
+            .appendField(");");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FF8C00");
+      }
+    };
+
+    Blockly.Blocks['verilog_monitor'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("$monitor(\"")
+            .appendField(new Blockly.FieldTextInput("Time: %0t, Val: %b"), "FORMAT")
+            .appendField("\", ")
+            .appendField(new Blockly.FieldTextInput("$time, sig"), "ARGS")
+            .appendField(");");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#FF8C00");
+      }
+    };
+
+    Blockly.Blocks['verilog_instantiate'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Instantiate Sub-Module:")
+            .appendField(new Blockly.FieldTextInput("sub_module_name"), "MODULE_TYPE")
+            .appendField("instance:")
+            .appendField(new Blockly.FieldTextInput("u0"), "INST_NAME");
+        this.appendDummyInput()
+            .appendField("Port Mapping:")
+            .appendField(new Blockly.FieldTextInput(".a(in1), .b(in2), .out(y)"), "MAPPING");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour("#E040FB");
+      }
+    };
+
+    // --- Generator Engine Initialization ---
+    Blockly.Verilog = new Blockly.Generator('Verilog');
+    Blockly.Verilog.ORDER_ATOMIC = 0;
+    Blockly.Verilog.ORDER_NONE = 99;
+
+    Blockly.Verilog.init = function(workspace) {};
+    Blockly.Verilog.finish = function(code) { return code; };
+
+    Blockly.Verilog.scrub_ = function(block, code, opt_thisOnly) {
+      var nextBlock = block.nextConnection && block.nextConnection.targetBlock();
+      var nextCode = opt_thisOnly ? '' : Blockly.Verilog.blockToCode(nextBlock);
+      return (code || '') + (nextCode || '');
+    };
+
+    Blockly.Verilog.forBlock = Object.create(null);
+
+    function addVerilogGen(blockType, genFn) {
+      Blockly.Verilog[blockType] = genFn;
+      Blockly.Verilog.forBlock[blockType] = genFn;
+    }
+
+    function sanitizeId(str) {
+      str = (str || 'sig').trim();
+      str = str.replace(/[^a-zA-Z0-9_\[\]:\s=\-\+'"]/g, ''); 
+      if (/^[0-9]/.test(str)) str = 's_' + str;
+      var baseName = str.split(/[\[\s=]/)[0];
+      
+      var kw = [
+        'module', 'endmodule', 'input', 'output', 'inout', 'wire', 'reg',
+        'integer', 'always', 'begin', 'end', 'if', 'else', 'case', 'endcase',
+        'assign', 'default', 'initial', 'parameter', 'localparam', 'time', 'for'
+      ];
+      
+      if (kw.includes(baseName)) {
+          return str.replace(baseName, baseName + '_val');
+      }
+      return str || 'sig';
+    }
+
+    addVerilogGen('verilog_module', function(block) {
+      var name = block.getFieldValue('NAME') || 'top_module';
+      name = name.replace(/[^a-zA-Z0-9_]/g, '');
+      
+      var ports = [];
+      var internals = [];
+
+      var declBlock = block.getInputTargetBlock('DECLARATIONS');
+      while (declBlock) {
+        if (declBlock.type === 'verilog_port') {
+          var dirType = declBlock.getFieldValue('DIR_TYPE') || 'input wire';
+          if (dirType.includes('input') && dirType.includes('reg')) { dirType = 'input wire'; }
+          
+          var widthVal = parseInt(declBlock.getFieldValue('WIDTH') || '1');
+          var rawName = declBlock.getFieldValue('NAME') || 'sig';
+          var initVal = declBlock.getFieldValue('INIT_VAL') || '';
+          
+          var pName = rawName.trim().replace(/[^a-zA-Z0-9_\[\]:\s=\-\+'"]/g, '');
+          if (!pName) pName = 'sig';
+          
+          var widthStr = widthVal > 1 ? " [" + (widthVal - 1) + ":0]" : "";
+          var initStr = initVal ? " = " + initVal.trim() : "";
+          var declStr = dirType + widthStr + " " + pName + initStr;
+
+          if (dirType.startsWith('input') || dirType.startsWith('output') || dirType.startsWith('inout')) {
+            var portName = pName.split('=')[0].trim();
+            ports.push('  ' + dirType + widthStr + " " + portName + initStr);
+          } else {
+            if (dirType.startsWith('parameter') || dirType.startsWith('localparam') || dirType === 'integer') {
+              if (!initStr && dirType !== 'integer') { initStr = ' = 0'; }
+              declStr = dirType + " " + pName + initStr;
+            }
+            internals.push('  ' + declStr + ';');
+          }
+        } else if (declBlock.type === 'verilog_comment') {
+          var commentText = declBlock.getFieldValue('TEXT') || '';
+          internals.push('  // ' + commentText);
+        }
+        declBlock = declBlock.getNextBlock();
+      }
+
+      var bodyCode = Blockly.Verilog.statementToCode(block, 'BODY') || '';
+
+      var code = 'module ' + name;
+      if (ports.length > 0) {
+        code += ' (\n' + ports.join(',\n') + '\n);\n\n';
+      } else {
+        code += ' ();\n\n';
+      }
+
+      if (internals.length > 0) {
+        code += internals.join('\n') + '\n\n';
+      }
+
+      code += bodyCode + '\nendmodule\n';
+      return code;
+    });
+
+    addVerilogGen('verilog_port', function(block) { return ''; });
+    addVerilogGen('verilog_comment', function(block) { return ''; });
+
+    addVerilogGen('verilog_signal', function(block) {
+      var sigName = block.getFieldValue('SIG') || 'sig';
+      return [sanitizeId(sigName), Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_always_ff', function(block) {
+      var clk = sanitizeId(block.getFieldValue('CLK') || 'clk');
+      var rst = block.getFieldValue('RST') || '';
+      rst = rst.trim();
+      var doCode = Blockly.Verilog.statementToCode(block, 'DO') || '';
+      var sens = "posedge " + clk;
+      if (rst && rst !== 'none' && rst !== 'sig') { sens += " or posedge " + sanitizeId(rst); }
+      return "always @(" + sens + ") begin\n" + doCode + "end\n\n";
+    });
+
+    addVerilogGen('verilog_always_comb', function(block) {
+      var doCode = Blockly.Verilog.statementToCode(block, 'DO') || '';
+      return "always @(*) begin\n" + doCode + "end\n\n";
+    });
+
+    addVerilogGen('verilog_assign', function(block) {
+      var lhs = Blockly.Verilog.valueToCode(block, 'LHS', Blockly.Verilog.ORDER_ATOMIC) || 'unused_sig';
+      var rhs = Blockly.Verilog.valueToCode(block, 'RHS', Blockly.Verilog.ORDER_ATOMIC) || "1'b0";
+      return "assign " + lhs + " = " + rhs + ";\n";
+    });
+
+    addVerilogGen('verilog_nonblocking_assign', function(block) {
+      var lhs = Blockly.Verilog.valueToCode(block, 'LHS', Blockly.Verilog.ORDER_ATOMIC) || 'unused_sig';
+      var rhs = Blockly.Verilog.valueToCode(block, 'RHS', Blockly.Verilog.ORDER_ATOMIC) || "1'b0";
+      return "  " + lhs + " <= " + rhs + ";\n";
+    });
+
+    addVerilogGen('verilog_blocking_assign', function(block) {
+      var lhs = Blockly.Verilog.valueToCode(block, 'LHS', Blockly.Verilog.ORDER_ATOMIC) || 'unused_sig';
+      var rhs = Blockly.Verilog.valueToCode(block, 'RHS', Blockly.Verilog.ORDER_ATOMIC) || "1'b0";
+      return "  " + lhs + " = " + rhs + ";\n";
+    });
+
+    addVerilogGen('verilog_binop', function(block) {
+      var a = Blockly.Verilog.valueToCode(block, 'A', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      var op = block.getFieldValue('OP') || '+';
+      var b = Blockly.Verilog.valueToCode(block, 'B', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      return ["(" + a + " " + op + " " + b + ")", Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_unop', function(block) {
+      var op = block.getFieldValue('OP') || '~';
+      var a = Blockly.Verilog.valueToCode(block, 'A', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      return [op + "(" + a + ")", Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_mux', function(block) {
+      var sel = Blockly.Verilog.valueToCode(block, 'SEL', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      var in1 = Blockly.Verilog.valueToCode(block, 'IN1', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      var in0 = Blockly.Verilog.valueToCode(block, 'IN0', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      return ["(" + sel + " ? " + in1 + " : " + in0 + ")", Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_slice', function(block) {
+      var sig = Blockly.Verilog.valueToCode(block, 'SIG', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      var msb = block.getFieldValue('MSB') || '7';
+      var lsb = block.getFieldValue('LSB') || '0';
+      return [sig + "[" + msb + ":" + lsb + "]", Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_concat', function(block) {
+      var a = Blockly.Verilog.valueToCode(block, 'A', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      var b = Blockly.Verilog.valueToCode(block, 'B', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      return ["{" + a + ", " + b + "}", Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_constant', function(block) {
+      return [block.getFieldValue('VAL') || "1'b0", Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_numeric', function(block) {
+      var w = block.getFieldValue('WIDTH') || '8';
+      var b = block.getFieldValue('BASE') || 'd';
+      var v = block.getFieldValue('VAL') || '0';
+      return [w + "'" + b + v, Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_if', function(block) {
+      var cond = Blockly.Verilog.valueToCode(block, 'COND', Blockly.Verilog.ORDER_ATOMIC) || "1'b1";
+      var thenBranch = Blockly.Verilog.statementToCode(block, 'THEN') || '';
+      var elseBranch = Blockly.Verilog.statementToCode(block, 'ELSE') || '';
+      var code = "  if (" + cond + ") begin\n" + thenBranch + "  end";
+      if (elseBranch && elseBranch.trim()) code += " else begin\n" + elseBranch + "  end";
+      return code + "\n";
+    });
+
+    addVerilogGen('verilog_case', function(block) {
+      var expr = Blockly.Verilog.valueToCode(block, 'EXPR', Blockly.Verilog.ORDER_ATOMIC) || 'sig';
+      var cases = Blockly.Verilog.statementToCode(block, 'CASES') || '';
+      return "  case (" + expr + ")\n" + cases + "  endcase\n";
+    });
+
+    addVerilogGen('verilog_case_item', function(block) {
+      var val = Blockly.Verilog.valueToCode(block, 'VAL', Blockly.Verilog.ORDER_ATOMIC) || "1'b0";
+      var doCode = Blockly.Verilog.statementToCode(block, 'DO') || '';
+      return "    " + val + ": begin\n" + doCode + "    end\n";
+    });
+
+    addVerilogGen('verilog_default', function(block) {
+      var doCode = Blockly.Verilog.statementToCode(block, 'DO') || '';
+      return "    default: begin\n" + doCode + "    end\n";
+    });
+
+    addVerilogGen('verilog_for', function(block) {
+      var cond = block.getFieldValue('COND') || 'i=0; i<16; i=i+1';
+      var doCode = Blockly.Verilog.statementToCode(block, 'DO') || '';
+      return "  for (" + cond + ") begin\n" + doCode + "  end\n";
+    });
+
+    addVerilogGen('verilog_initial', function(block) {
+      var doCode = Blockly.Verilog.statementToCode(block, 'DO') || '';
+      return "initial begin\n" + doCode + "end\n\n";
+    });
+
+    addVerilogGen('verilog_delay', function(block) {
+      var d = block.getFieldValue('DELAY') || '10';
+      return "  #" + d + ";\n";
+    });
+
+    addVerilogGen('verilog_display', function(block) {
+      var fmt = block.getFieldValue('FORMAT') || '';
+      var args = block.getFieldValue('ARGS') || '';
+      if (args && args.trim().length > 0) {
+          return "  $display(\"" + fmt + "\", " + args + ");\n";
+      } else {
+          return "  $display(\"" + fmt + "\");\n";
+      }
+    });
+
+    addVerilogGen('verilog_monitor', function(block) {
+      var fmt = block.getFieldValue('FORMAT') || '';
+      var args = block.getFieldValue('ARGS') || '';
+      if (args && args.trim().length > 0) {
+          return "  $monitor(\"" + fmt + "\", " + args + ");\n";
+      } else {
+          return "  $monitor(\"" + fmt + "\");\n";
+      }
+    });
+
+    addVerilogGen('verilog_instantiate', function(block) {
+      var mType = sanitizeId(block.getFieldValue('MODULE_TYPE') || 'sub_module');
+      var iName = sanitizeId(block.getFieldValue('INST_NAME') || 'u0');
+      var map = block.getFieldValue('MAPPING') || '';
+      map = map.trim().replace(/,\s*$/, '');
+      return "  " + mType + " " + iName + " (\n    " + map + "\n  );\n\n";
+    });
+
+    var prarambhDarkGreyTheme = Blockly.Theme.defineTheme('prarambhDarkGrey', {
+      'base': Blockly.Themes.Classic,
+      'componentStyles': {
+        'workspaceBackgroundColour': '#1E1E1E',
+        'toolboxBackgroundColour': '#252526',
+        'toolboxForegroundColour': '#CCCCCC',
+        'flyoutBackgroundColour': '#2D2D30',
+        'flyoutForegroundColour': '#CCCCCC',
+        'scrollbarColour': '#3E3E42',
+      }
+    });
+
+    var workspace = Blockly.inject('blocklyDiv', {
+      toolbox: document.getElementById('toolbox'),
+      theme: prarambhDarkGreyTheme,
+      grid: { spacing: 25, length: 3, colour: '#333333', snap: true },
+      zoom: { controls: true, wheel: true, startScale: 0.95, maxScale: 3, minScale: 0.3 },
+      trashcan: true,
+      sounds: false
+    });
+
+    window.generatedVerilog = "";
+    function updateCode() {
+      try { window.generatedVerilog = Blockly.Verilog.workspaceToCode(workspace) || ""; }
+      catch (err) { console.error("Verilog Generation Error: ", err); }
+    }
+
+    workspace.addChangeListener(function(event) { if (event.type !== Blockly.Events.UI) { updateCode(); } });
+
+    window.exportWorkspace = function() {
+      var xml = Blockly.Xml.workspaceToDom(workspace);
+      return new XMLSerializer().serializeToString(xml);
+    };
+
+    window.importWorkspace = function(xmlText) {
+      workspace.clear();
+      if (!xmlText || !xmlText.trim()) return;
+      
+      if (xmlText.startsWith("PARSE_ERROR:")) {
+          var errorMsg = xmlText.replace("PARSE_ERROR:", "").trim();
+          console.error("Verilog Parser Failed:", errorMsg);
+          
+          var appConsole = document.getElementById('console') || 
+                           document.getElementById('terminal') || 
+                           document.querySelector('.console-output');
+                           
+          if (appConsole) {
+              appConsole.innerHTML += '<div style="color: #FF5252; font-weight: bold; margin-bottom: 5px;">' +
+                                      '[AST PARSE ERROR] ' + errorMsg +
+                                      '</div>';
+              appConsole.scrollTop = appConsole.scrollHeight;
+          } else {
+              alert("[AST PARSE ERROR]\n" + errorMsg);
+          }
+          return;
+      }
+      
+      try {
+        var parser = new DOMParser();
+        var xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+        Blockly.Xml.domToWorkspace(xmlDoc.documentElement, workspace);
+        updateCode();
+      } catch (e) { 
+        console.error("Workspace import failed: ", e); 
+      }
+    };
+    
+    window.appendWorkspace = function(xmlText) {
+      if (!xmlText || !xmlText.trim()) return;
+
+      if (xmlText.startsWith("PARSE_ERROR:")) {
+          var errorMsg = xmlText.replace("PARSE_ERROR:", "").trim();
+          console.error("Verilog Parser Failed on Import:", errorMsg);
+          
+          var appConsole = document.getElementById('console') || 
+                           document.getElementById('terminal') || 
+                           document.querySelector('.console-output');
+                           
+          if (appConsole) {
+              appConsole.innerHTML += '<div style="color: #FF5252; font-weight: bold; margin-bottom: 5px;">' +
+                                      '[AST IMPORT ERROR] ' + errorMsg +
+                                      '</div>';
+              appConsole.scrollTop = appConsole.scrollHeight;
+          } else {
+              alert("[AST IMPORT ERROR]\n" + errorMsg);
+          }
+          return;
+      }
+
+      try {
+        var parser = new DOMParser();
+        var xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+        Blockly.Xml.domToWorkspace(xmlDoc.documentElement, workspace);
+        updateCode();
+      } catch (e) { 
+        console.error("Workspace append failed: ", e); 
+      }
+    };
+  </script>
+</body>
+</html>

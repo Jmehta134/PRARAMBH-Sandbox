@@ -107,18 +107,6 @@ class MemoryRegionView(QWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
 
-        # --- Title Header ---
-        title = QLabel("HARDWARE MEMORY REGION MONITOR")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 20px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 5px;
-        """)
-        self.layout.addWidget(title)
-
         # --- Top Section: 2-Region Memory Map Selector Bar ---
         ctrl_frame = QFrame()
         ctrl_frame.setStyleSheet("""

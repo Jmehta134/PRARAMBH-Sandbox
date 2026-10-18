@@ -33,10 +33,10 @@ class MechanicalKey(QPushButton):
         self.hex_val = idx + 1
         self.target_port = "None"
         
-        self.setFixedSize(105, 105)
+        self.setFixedSize(115, 115)
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet("""
-            QPushButton { background-color: #EFEFEF; border: 2px solid #ADADAD; border-bottom: 5px solid #777777; border-radius: 8px; font-weight: bold; color: #222222; font-size: 13px; }
+            QPushButton { background-color: #EFEFEF; border: 2px solid #ADADAD; border-bottom: 5px solid #777777; border-radius: 8px; font-weight: bold; color: #222222; font-size: 16px; }
             QPushButton:hover { background-color: #E1F0FA; border: 2px solid #0078D7; border-bottom: 5px solid #005A9E; }
             QPushButton:pressed { background-color: #CCE4F7; border: 2px solid #005A9E; border-bottom: 2px solid #005A9E; padding-top: 5px; }
         """)
@@ -82,16 +82,7 @@ class ProgrammableKeypadView(QWidget):
         self.available_inputs = []
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        title = QLabel("PROGRAMMABLE MACRO KEYPAD")
-        subtitle = QLabel("Right-click any key to map it to a specific Verilog input port")
-        title.setAlignment(Qt.AlignCenter)
-        subtitle.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-weight: 900; color: #333333; font-size: 18px; letter-spacing: 1.5px;")
-        subtitle.setStyleSheet("color: #666666; font-size: 12px; font-style: italic; margin-bottom: 10px;")
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        layout.setContentsMargins(8, 8, 8, 8)
         
         frame = QFrame()
         frame.setStyleSheet("QFrame { background-color: #E5E5E5; border: 2px solid #CCCCCC; border-radius: 10px; }")
@@ -106,6 +97,10 @@ class ProgrammableKeypadView(QWidget):
             self.keys.append(btn)
             
         layout.addWidget(frame, alignment=Qt.AlignCenter)
+        subtitle = QLabel("Right-click any key to map it to a specific Verilog input port")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("color: #666666; font-size: 16px; font-style: italic; margin-bottom: 10px;")
+        layout.addWidget(subtitle)
         layout.addStretch()
 
     def set_available_inputs(self, inputs_list):

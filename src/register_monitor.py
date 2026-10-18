@@ -7,7 +7,7 @@ class RegisterRow(QFrame):
         super().__init__()
         self.setStyleSheet("RegisterRow { background-color: #E6E6E6; border: 1px solid #C0C0C0; border-radius: 6px; }")
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(20)
         
         self.combo = QComboBox()
@@ -37,12 +37,7 @@ class RegisterMonitorView(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
-        layout.setContentsMargins(15, 20, 15, 15)
-        
-        title = QLabel("DYNAMIC REGISTER PROBE")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-weight: 900; color: #333333; font-size: 18px; letter-spacing: 2px; margin-bottom: 10px;")
-        layout.addWidget(title)
+        layout.setContentsMargins(8, 8, 8, 8)
         
         self.rows = [RegisterRow() for _ in range(6)]
         for row in self.rows:

@@ -13,7 +13,7 @@ class VirtualLED(QFrame):
     """A custom styled widget representing a hardware status LED."""
     def __init__(self):
         super().__init__()
-        self.setFixedSize(24, 24)
+        self.setFixedSize(28, 28)
         self.set_state(False)
 
     def set_state(self, is_on):
@@ -22,7 +22,7 @@ class VirtualLED(QFrame):
                 QFrame {
                     background-color: #00E5FF;
                     border: 1px solid #00B3CC;
-                    border-radius: 12px;
+                    border-radius: 14px;
                 }
             """)
         else:
@@ -30,7 +30,7 @@ class VirtualLED(QFrame):
                 QFrame {
                     background-color: #D0D0D0;
                     border: 1px solid #A0A0A0;
-                    border-radius: 12px;
+                    border-radius: 14px;
                 }
             """)
 
@@ -41,26 +41,13 @@ class CharDisplayView(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(15, 15, 15, 15)
+        self.layout.setContentsMargins(8, 8, 8, 8)
+        self.layout.setSpacing(12)
         
         # Internal LCD Emulator State
         self.memory = [' '] * 64
         self.cursor = 0
         self.prev_en = False
-
-        # --- Standardized Centered Pane Header ---
-        title = QLabel("CHARACTER DISPLAY (LCD)")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-weight: 900; 
-            color: #333333; 
-            font-size: 18px; 
-            letter-spacing: 1.5px;
-            margin-bottom: 5px;
-        """)
-        self.layout.addWidget(title)
-
-        self.layout.addSpacing(5)
 
         # --- TOP SECTION: The Character Grid Container ---
         self.grid_container = QFrame()
@@ -73,18 +60,18 @@ class CharDisplayView(QWidget):
         """)
         
         self.grid_layout = QGridLayout(self.grid_container)
-        self.grid_layout.setSpacing(2)
-        self.grid_layout.setContentsMargins(4, 4, 4, 4)
+        self.grid_layout.setSpacing(3)
+        self.grid_layout.setContentsMargins(6, 6, 6, 6)
 
         self.cells = []
-        tech_font = QFont("Consolas", 16, QFont.Bold)
+        tech_font = QFont("Consolas", 20, QFont.Bold)
         tech_font.setStyleHint(QFont.Monospace)
 
-        # Build the 16x4 distinct character boxes
+        # Build the 16x4 distinct character boxes (Scaled up from 30x42 to 38x52)
         for row in range(4):
             for col in range(16):
                 cell = QLabel()
-                cell.setFixedSize(30, 42)
+                cell.setFixedSize(38, 52)
                 cell.setAlignment(Qt.AlignCenter)
                 cell.setFont(tech_font)
                 self.grid_layout.addWidget(cell, row, col)
@@ -97,8 +84,6 @@ class CharDisplayView(QWidget):
         grid_wrapper.addStretch()
         self.layout.addLayout(grid_wrapper)
 
-        self.layout.addSpacing(30)
-
         # --- BOTTOM SECTION: 4 Distinct Control Boxes ---
         regs_layout = QVBoxLayout()
         regs_layout.setSpacing(12)
@@ -110,12 +95,12 @@ class CharDisplayView(QWidget):
                 background-color: #E5E5E5;
             }
         """
-        lbl_style = "font-weight: 900; color: #555555; font-size: 12px; letter-spacing: 1px; border: none; background: transparent;"
+        lbl_style = "font-weight: 900; color: #555555; font-size: 13px; letter-spacing: 1px; border: none; background: transparent;"
         badge_style = """
             QLabel {
                 background-color: #FFFFFF; border: 2px solid #ADADAD;
-                padding: 6px 12px; border-radius: 6px; font-weight: bold;
-                font-size: 14px; color: #005A9E; font-family: monospace;
+                padding: 7px 14px; border-radius: 6px; font-weight: bold;
+                font-size: 15px; color: #005A9E; font-family: monospace;
             }
         """
         lcd_style = """
@@ -125,7 +110,7 @@ class CharDisplayView(QWidget):
             }
         """
 
-        box_height = 70
+        box_height = 80  # Scaled up box height (was 70)
 
         # 1. Instruction Register Box (Full Width Horizontal)
         box_ir = QFrame()
@@ -141,7 +126,7 @@ class CharDisplayView(QWidget):
         self.lcd_ir = QLCDNumber()
         self.lcd_ir.setDigitCount(2)
         self.lcd_ir.setHexMode()
-        self.lcd_ir.setFixedSize(90, 45)
+        self.lcd_ir.setFixedSize(105, 52)
         self.lcd_ir.setStyleSheet(lcd_style)
         self.lcd_ir.display("00")
         
@@ -165,7 +150,7 @@ class CharDisplayView(QWidget):
         self.lcd_dr = QLCDNumber()
         self.lcd_dr.setDigitCount(2)
         self.lcd_dr.setHexMode()
-        self.lcd_dr.setFixedSize(90, 45)
+        self.lcd_dr.setFixedSize(105, 52)
         self.lcd_dr.setStyleSheet(lcd_style)
         self.lcd_dr.display("00")
         
@@ -232,7 +217,7 @@ class CharDisplayView(QWidget):
         boxes_wrapper.addStretch()
 
         self.layout.addLayout(boxes_wrapper)
-        self.layout.addStretch(2)
+        self.layout.addStretch(1)
 
         # Startup Display Initialization
         boot_text = "   uP PRARAMBH      SYSTEM IDLE                                 "
@@ -263,7 +248,6 @@ class CharDisplayView(QWidget):
             self.led_en.set_state(en_bit)
 
             # === HD44780 SYNCHRONOUS LOGIC ===
-            # The LCD only executes a command when the Enable (EN) pin pulses HIGH!
             if en_bit and not self.prev_en:
                 if not rs_bit: 
                     # --- Instruction Mode (RS = 0) ---
