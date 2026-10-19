@@ -1,4 +1,5 @@
 import os
+import sys
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QMessageBox, 
     QShortcut, QFrame, QLabel
@@ -8,6 +9,14 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtGui import QKeySequence, QDesktopServices
 
 from verilog_parser import verilog_to_blockly_xml
+
+def get_absolute_path(relative_path):
+    """Safely resolve paths whether running from Python or compiled PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    return os.path.normpath(os.path.join(base_path, relative_path))
 
 class VisualBlockBuilder(QWidget):
     file_changed = pyqtSignal(str)
@@ -116,8 +125,7 @@ class VisualBlockBuilder(QWidget):
         self.layout.addWidget(top_bar)
 
         self.web_view = QWebEngineView()
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        html_path = os.path.join(base_dir, "assets", "blockly", "index.html")
+        html_path = get_absolute_path(os.path.join("assets", "blockly", "index.html"))
         self.web_view.load(QUrl.fromLocalFile(html_path))
         self.web_view.page().setBackgroundColor(Qt.transparent)
 

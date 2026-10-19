@@ -69,7 +69,7 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install PyQt5 requests pyinstaller Pillow
+          pip install PyQt5 PyQtWebEngine requests pyinstaller pyverilog Pillow
 
       - name: Build Windows Packages
         if: matrix.os == 'windows-latest'
@@ -80,7 +80,7 @@ jobs:
           pyinstaller --noconfirm --onefile --windowed --icon="assets\icon.ico" --name "Installer" launcher.py
           
           # Build Core Sandbox
-          pyinstaller --noconfirm --onedir --windowed --icon="assets\icon.ico" --name "Sandbox" --add-data "examples;examples" --add-data "bin;bin" --add-data "assets\icon.png;." src\main.py
+          pyinstaller --noconfirm --onedir --windowed --icon="assets\icon.ico" --name "Sandbox" --hidden-import=PyQt5.QtWebEngineWidgets --hidden-import=PyQt5.QtWebEngineCore --hidden-import=PyQt5.QtNetwork --add-data "examples;examples" --add-data "bin;bin" --add-data "assets;assets" src\main.py
           
           # Compress Sandbox direct contents into zip
           Compress-Archive -Path "dist\Sandbox\*" -DestinationPath "${{ matrix.sandbox_zip }}" -Force
@@ -92,7 +92,7 @@ jobs:
           pyinstaller --noconfirm --onefile --windowed --icon="assets/icon.png" --name "Installer" launcher.py
           
           # Build Core Sandbox
-          pyinstaller --noconfirm --onedir --name "Sandbox" --hidden-import=pkgutil --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtWidgets --add-data "examples:examples" --add-data "bin:bin" --add-data "assets/icon.png:." src/main.py
+          pyinstaller --noconfirm --onedir --name "Sandbox" --hidden-import=pkgutil --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtWidgets --hidden-import=PyQt5.QtWebEngineWidgets --hidden-import=PyQt5.QtWebEngineCore --hidden-import=PyQt5.QtNetwork --add-data "examples:examples" --add-data "bin:bin" --add-data "assets:assets" src/main.py
           
           # Make binaries executable inside build
           find dist/Sandbox -type f \( -name "Sandbox" -o -name "iverilog" -o -name "vvp" -o -name "ivl" -o -name "ivlpp" \) -exec chmod +x {} +
