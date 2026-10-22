@@ -47,7 +47,7 @@ def parse_ast_to_expression(node):
             w = parts[0] if parts[0] else "32"
             if len(parts) > 1 and len(parts[1]) > 0:
                 base_char = parts[1][0].lower()
-                if base_char == 's':  # Handle signed bases ('sh, 'sd)
+                if base_char == 's': 
                     b = parts[1][1].lower() if len(parts[1]) > 1 else 'd'
                     v = parts[1][2:]
                 else:
@@ -64,7 +64,6 @@ def parse_ast_to_expression(node):
         var_node = node.var if hasattr(node, 'var') else node
         v_sig.append(parse_ast_to_expression(var_node))
         
-        # Use ASTCodeGenerator to stringify complex expressions
         idx_msb, idx_lsb = "0", "0"
         if hasattr(node, 'ptr'):
             idx_msb = idx_lsb = codegen.visit(node.ptr).strip()
@@ -95,7 +94,6 @@ def parse_ast_to_expression(node):
         v_in0.append(parse_ast_to_expression(node.false_value))
         return mux_blk
 
-    # FIX: Replaced "GreaterThanEq" and "LessThanEq" with PyVerilog's actual AST class names: "GreaterEq" and "LessEq"
     elif node_type in ('Plus', 'Minus', 'Times', 'Divide', 'Eq', 'NotEq', 'GreaterThan', 'LessThan', 'GreaterEq', 'LessEq', 'Land', 'Lor', 'Sll', 'Srl', 'And', 'Or', 'Xor'):
         op_map = {
             'Plus': '+', 'Minus': '-', 'Times': '*', 'Divide': '/', 'Eq': '==', 'NotEq': '!=',
@@ -253,7 +251,18 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
     global DECLARED_SIGNALS
     DECLARED_SIGNALS.clear()
 
-    # Pre-parse: Save inline initializations and strip them from types that standard Verilog-2001 rejects
+    # --- STRICT TOP-LEVEL SANITIZATION ---
+    # Strip away any stray, floating code outside of the module scope to prevent PyVerilog crashes.
+    mod_match = re.search(r'\bmodule\b.*?\bendmodule\b', verilog_code, re.DOTALL)
+    if mod_match:
+        verilog_code = mod_match.group(0)
+    elif verilog_code.strip():
+        # If no module exists but code is present, securely wrap it in a dummy module.
+        verilog_code = f"module top_module;\n{verilog_code}\nendmodule"
+    else:
+        # Empty file, return empty workspace
+        return '<xml xmlns="https://developers.google.com/blockly/xml"></xml>'
+
     init_vals = {}
     init_pattern = r'\b(input|output|inout|wire|reg|integer|parameter|localparam)\s+(?:signed\s+)?(?:\[[^\]]+\]\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;,)]+)'
     for match in re.finditer(init_pattern, verilog_code):
@@ -262,7 +271,6 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
     strip_pattern = r'(\b(?:input|output|inout|wire|reg|integer)\s+(?:signed\s+)?(?:\[[^\]]+\]\s+)?[a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*[^;,)]+([;,)])'
     clean_code = re.sub(strip_pattern, r'\1\2', verilog_code)
 
-    # Temporarily mute stdout and stderr to suppress PLY LALR table generation logs
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     with open(os.devnull, 'w') as null_out:
@@ -372,7 +380,6 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                 elif itype == 'Always':
                     is_comb = False
                     clk_name = "clk"
-                    rst_name = ""
                     
                     if hasattr(item, 'sens_list') and item.sens_list:
                         for sens in item.sens_list.list:
@@ -384,15 +391,18 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                             elif sens_type not in ('posedge', 'negedge'):
                                 is_comb = True
                             else:
-                                if 'clk' in sens_str: clk_name = sens_str.replace('posedge ', '').strip()
-                                if 'rst' in sens_str: rst_name = sens_str.replace('posedge ', '').strip()
+                                clean_sens = sens_str.replace('posedge ', '').replace('negedge ', '').strip()
+                                if not ('rst' in clean_sens or 'reset' in clean_sens): 
+                                    clk_name = clean_sens
 
                     blk_type = "verilog_always_comb" if is_comb else "verilog_always_ff"
                     ff_blk = ET.Element("block", type=blk_type)
                     
                     if not is_comb:
-                        ET.SubElement(ff_blk, "field", name="CLK").text = clk_name
-                        ET.SubElement(ff_blk, "field", name="RST").text = rst_name
+                        v_clk = ET.SubElement(ff_blk, "value", name="CLK")
+                        clk_sig = ET.Element("block", type="verilog_signal")
+                        ET.SubElement(clk_sig, "field", name="SIG").text = clk_name
+                        v_clk.append(clk_sig)
 
                     inner_stmts = item.statement.statements if hasattr(item.statement, 'statements') else [item.statement]
                     inner_blks = parse_ast_statements(inner_stmts)

@@ -41,7 +41,13 @@
       <block type="verilog_comment"></block>
     </category>
     <category name="Sequential (always)" colour="#00FF00">
-      <block type="verilog_always_ff"></block>
+      <block type="verilog_always_ff">
+        <value name="CLK">
+          <shadow type="verilog_signal">
+            <field name="SIG">clk</field>
+          </shadow>
+        </value>
+      </block>
       <block type="verilog_always_comb"></block>
     </category>
     <category name="Assignments" colour="#FFB74D">
@@ -138,9 +144,11 @@
 
     Blockly.Blocks['verilog_always_ff'] = {
       init: function() {
-        this.appendDummyInput().appendField("always @(posedge").appendField(new Blockly.FieldTextInput("clk"), "CLK").appendField("or posedge").appendField(new Blockly.FieldTextInput("rst"), "RST").appendField(")");
+        this.appendValueInput("CLK").appendField("always @(posedge");
+        this.appendDummyInput().appendField(")");
         this.appendStatementInput("DO").appendField("begin");
         this.appendDummyInput().appendField("end");
+        this.setInputsInline(true);
         this.setPreviousStatement(true, null);
         this.setNextStatement(true, null);
         this.setColour("#00FF00");
@@ -321,7 +329,6 @@
       }
     };
 
-    // Backward-compatibility alias
     Blockly.Blocks['verilog_constant'] = {
       init: function() {
         this.appendDummyInput().appendField("val:").appendField(new Blockly.FieldTextInput("1'b0"), "VAL");
@@ -515,13 +522,9 @@
     });
 
     addVerilogGen('verilog_always_ff', function(block) {
-      var clk = sanitizeId(block.getFieldValue('CLK') || 'clk');
-      var rst = block.getFieldValue('RST') || '';
-      rst = rst.trim();
+      var clk = Blockly.Verilog.valueToCode(block, 'CLK', Blockly.Verilog.ORDER_ATOMIC) || 'clk';
       var doCode = Blockly.Verilog.statementToCode(block, 'DO') || '';
-      var sens = "posedge " + clk;
-      if (rst && rst !== 'none' && rst !== 'sig') { sens += " or posedge " + sanitizeId(rst); }
-      return "always @(" + sens + ") begin\n" + doCode + "end\n\n";
+      return "always @(posedge " + clk + ") begin\n" + doCode + "end\n\n";
     });
 
     addVerilogGen('verilog_always_comb', function(block) {
@@ -683,8 +686,22 @@
     });
 
     window.generatedVerilog = "";
+    
+    // --- TOP-LEVEL SANITIZATION UPDATE ---
     function updateCode() {
-      try { window.generatedVerilog = Blockly.Verilog.workspaceToCode(workspace) || ""; }
+      try { 
+        var topBlocks = workspace.getTopBlocks(true);
+        var codeList = [];
+        for (var i = 0; i < topBlocks.length; i++) {
+          var blk = topBlocks[i];
+          // STRICT FILTER: Ignore any stray/floating logic blocks outside the module.
+          // Verilog strictly requires logic to be nested inside a module definition.
+          if (blk.type === 'verilog_module' || blk.type === 'verilog_comment') {
+            codeList.push(Blockly.Verilog.blockToCode(blk));
+          }
+        }
+        window.generatedVerilog = codeList.join('\n');
+      }
       catch (err) { console.error("Verilog Generation Error: ", err); }
     }
 

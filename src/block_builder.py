@@ -142,7 +142,7 @@ class VisualBlockBuilder(QWidget):
         if path:
             filename = os.path.basename(path)
             self.lbl_filename.setText(f"Editing: {filename}")
-            self.lbl_filename.setStyleSheet("color: #00E5FF; font-family: monospace; font-weight: bold;")
+            self.lbl_filename.setStyleSheet("color: #1c1c1c; font-family: monospace; font-weight: bold;")
             if emit_signal:
                 self.file_changed.emit(path)
         else:

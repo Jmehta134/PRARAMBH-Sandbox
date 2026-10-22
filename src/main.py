@@ -670,8 +670,8 @@ class UnifiedSandboxIDE(QMainWindow):
         self.left_pane = SandboxPane()
         self.right_pane = SandboxPane()
         
-        self.left_pane.tool_selector.setCurrentIndex(11) 
-        self.right_pane.tool_selector.setCurrentIndex(1)
+        self.left_pane.tool_selector.setCurrentIndex(11) # Default panes
+        self.right_pane.tool_selector.setCurrentIndex(0)
         
         self.splitter.addWidget(self.left_pane)
         self.splitter.addWidget(self.right_pane)
@@ -693,7 +693,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.target_verilog_file = file_path
         filename = os.path.basename(file_path)
         self.lbl_file.setText(f"Target: {filename}")
-        self.lbl_file.setStyleSheet("color: #00E5FF; font-family: monospace; font-weight: bold;")
+        self.lbl_file.setStyleSheet("color: #1c1c1c; font-family: monospace; font-weight: bold;")
         self.engine.compile_and_run(file_path)
 
     def select_file(self):
@@ -702,7 +702,7 @@ class UnifiedSandboxIDE(QMainWindow):
             self.target_verilog_file = file_path
             filename = os.path.basename(file_path)
             self.lbl_file.setText(f"Target: {filename}")
-            self.lbl_file.setStyleSheet("color: #00E5FF; font-family: monospace; font-weight: bold;")
+            self.lbl_file.setStyleSheet("color: #1c1c1c; font-family: monospace; font-weight: bold;")
             
             self.full_block_builder.load_external_file(file_path)
             self.engine.compile_and_run(file_path)
@@ -830,7 +830,16 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "icon.png")
+    if getattr(sys, 'frozen', False):
+        # PyInstaller bundled path resolution
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        icon_path = os.path.join(base_dir, "assets", "icon.png")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(base_dir, "_internal", "assets", "icon.png")
+    else:
+        # Standard Python script path resolution
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "icon.png")
+        
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
         

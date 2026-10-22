@@ -3,7 +3,9 @@ import os
 import platform
 import stat
 import re
+import time
 from PyQt5.QtCore import QObject, QProcess, pyqtSignal
+from PyQt5.QtWidgets import QApplication
 
 class SimulationEngine(QObject):
     hardware_updated = pyqtSignal(dict)
@@ -13,7 +15,6 @@ class SimulationEngine(QObject):
     def __init__(self):
         super().__init__()
         
-        # 1. Initialize process and instance state FIRST
         self.process = QProcess()
         self.process.readyReadStandardOutput.connect(self.read_stdout)
         self.process.readyReadStandardError.connect(self.read_stderr)
@@ -22,42 +23,30 @@ class SimulationEngine(QObject):
         self.verilog_signals = []
         self.ui_signals = []
         self.stdout_buffer = ""
+        self._is_compiling = False  # Engine lock to prevent double-triggering
 
-        # 2. Resolve Root Directory (Handles src/ subfolder vs PyInstaller bundle)
         if getattr(sys, 'frozen', False):
-            # Bundled with PyInstaller: root is current executable or _MEIPASS temp dir
             root_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
         else:
-            # Running as raw script in src/: Go ONE level up from src/ to project root
             src_dir = os.path.dirname(os.path.abspath(__file__))
             root_dir = os.path.abspath(os.path.join(src_dir, ".."))
 
-        # 3. Dynamic OS Binary Resolution
         system_os = platform.system().lower()
 
         if system_os == "windows":
             self.iverilog_path = os.path.join(root_dir, "bin", "windows", "bin", "iverilog.exe")
             self.vvp_path = os.path.join(root_dir, "bin", "windows", "bin", "vvp.exe")
-        else:  # Linux / macOS
+        else:
             self.iverilog_path = os.path.join(root_dir, "bin", "linux", "bin", "iverilog")
             self.vvp_path = os.path.join(root_dir, "bin", "linux", "bin", "vvp")
-
-            # Apply execute permissions (+x) on Linux binaries
             for binary in [self.iverilog_path, self.vvp_path]:
                 if os.path.exists(binary):
                     st = os.stat(binary)
                     os.chmod(binary, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
-        # 4. Debug print to confirm path in console
         print(f"[DEBUG] Resolved iverilog path: {self.iverilog_path}")
-        
-        self.input_map = {}
-        self.verilog_signals = []
-        self.ui_signals = []
-        self.stdout_buffer = ""
 
     def cleanup_previous_process(self):
-        """Ensures any running vvp process is forcefully terminated and closed."""
         if self.process.state() != QProcess.NotRunning:
             self.process.kill()
             self.process.waitForFinished(1000)
@@ -109,19 +98,15 @@ class SimulationEngine(QObject):
         tb += "    integer cmd_val;\n\n"
         
         tb += "    initial begin\n"
-        
-        # --- BULLETPROOF HARDWARE BOOT SEQUENCE ---
         if 'clk' in parsed['inputs']:
             tb += "        clk = 0;\n"
         if 'rst' in parsed['inputs']:
-            # Hold reset high AND pulse the clock so Sync & Async designs initialize
             tb += "        rst = 1; #5; clk = 1; #5; clk = 0; #5; rst = 0; #5;\n"
         else:
             tb += "        #20;\n"
             
         tb += '        $display("TESTBENCH_READY");\n'
         
-        # Force Verilog to broadcast its initial 0000 state to the UI
         format_str = "UPDATE:" + ":".join(["%h" for _ in self.verilog_signals])
         vars_str = ", ".join(self.verilog_signals)
         if self.verilog_signals:
@@ -129,7 +114,6 @@ class SimulationEngine(QObject):
             
         tb += "        $fflush(32'h8000_0001);\n"
         tb += "        forever begin\n"
-        
         tb += '            if ($fscanf(32\'h8000_0000, "%d %d", cmd_id, cmd_val) == 2) begin\n'
         
         for inp, idx in self.input_map.items():
@@ -151,30 +135,65 @@ class SimulationEngine(QObject):
             f.write(tb)
 
     def compile_and_run(self, file_path):
-        # 1. Clean up any previous execution to release process/file locks
-        self.cleanup_previous_process()
-
-        with open(file_path, 'r', encoding='utf-8') as f:
-            verilog_code = f.read()
-
-        parsed = self.parse_verilog_content(verilog_code)
-        self.parsed_design.emit(parsed)
-        self.generate_embedded_testbench(parsed, verilog_code)
-        
-        self.log_message.emit(f"Parsed and prepared inline harness for module: '{parsed['module_name']}'", "INFO")
-        
-        # 2. Synchronous compilation pass via iverilog
-        compile_proc = QProcess()
-        compile_proc.start(self.iverilog_path, ["-o", "sim_build.vvp", "auto_sandbox_tb.v"])
-        compile_proc.waitForFinished(5000)
-        
-        if compile_proc.exitCode() != 0:
-            err = compile_proc.readAllStandardError().data().decode().strip()
-            self.log_message.emit(f"Compilation Error:\n{err}", "ERROR")
+        # 1. Debounce rapid double-triggers from the UI
+        if getattr(self, '_is_compiling', False):
             return
+        self._is_compiling = True
+
+        try:
+            self.cleanup_previous_process()
+
+            verilog_code = ""
+            file_read_success = False
             
-        # 3. Launch long-running simulation backend process via vvp
-        self.process.start(self.vvp_path, ["sim_build.vvp"])
+            # 2. Wait up to 1.5s for the JS WebEngine to finish writing the file asynchronously
+            for attempt in range(15):
+                if os.path.exists(file_path):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            verilog_code = f.read()
+                        
+                        if verilog_code.strip():
+                            file_read_success = True
+                            break
+                    except Exception:
+                        pass
+                
+                # Process UI events so the WebEngine isn't frozen while writing the file
+                QApplication.processEvents()
+                time.sleep(0.1)
+
+            if not file_read_success:
+                if os.path.exists(file_path):
+                    if not verilog_code.strip():
+                        self.log_message.emit("Canvas is empty. No hardware logic generated to compile.", "WARN")
+                    else:
+                        self.log_message.emit(f"Engine Error: Access denied to {file_path}. File may be in use.", "ERROR")
+                else:
+                    self.log_message.emit(f"Engine Error: File was not found on disk at {file_path}.", "ERROR")
+                return
+
+            parsed = self.parse_verilog_content(verilog_code)
+            self.parsed_design.emit(parsed)
+            self.generate_embedded_testbench(parsed, verilog_code)
+            
+            self.log_message.emit(f"Parsed and prepared inline harness for module: '{parsed['module_name']}'", "INFO")
+            
+            # 3. Synchronous compilation pass
+            compile_proc = QProcess()
+            compile_proc.start(self.iverilog_path, ["-g2012", "-o", "sim_build.vvp", "auto_sandbox_tb.v"])
+            compile_proc.waitForFinished(5000)
+            
+            if compile_proc.exitCode() != 0:
+                err = compile_proc.readAllStandardError().data().decode().strip()
+                self.log_message.emit(f"Compilation Error:\n{err}", "ERROR")
+                return
+                
+            # 4. Launch simulation backend
+            self.process.start(self.vvp_path, ["sim_build.vvp"])
+
+        finally:
+            self._is_compiling = False
 
     def send_command(self, signal_name, value):
         if self.process.state() == QProcess.Running:
@@ -187,7 +206,6 @@ class SimulationEngine(QObject):
         raw_bytes = self.process.readAllStandardOutput().data()
         self.stdout_buffer += raw_bytes.decode('utf-8', errors='ignore')
         
-        # Process full line breaks accumulated in the stream buffer
         while '\n' in self.stdout_buffer:
             line, self.stdout_buffer = self.stdout_buffer.split('\n', 1)
             line = line.strip()
