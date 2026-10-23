@@ -1,6 +1,6 @@
 module example_string_input (
   input wire clk,
-  input wire [7:0] string_in
+  input wire [127:0] string_in
 );
 
   reg [7:0] prev_string = 128'd0;

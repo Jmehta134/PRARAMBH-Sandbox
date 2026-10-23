@@ -116,10 +116,7 @@
               ["integer", "integer"]
             ]), "DIR_TYPE")
             .appendField("width")
-            .appendField(new Blockly.FieldDropdown([
-              ["1-bit", "1"], ["2-bit [1:0]", "2"], ["4-bit [3:0]", "4"],
-              ["8-bit [7:0]", "8"], ["16-bit [15:0]", "16"], ["32-bit [31:0]", "32"]
-            ]), "WIDTH")
+            .appendField(new Blockly.FieldTextInput("1"), "WIDTH")
             .appendField("name")
             .appendField(new Blockly.FieldTextInput("sig"), "NAME");
         this.appendValueInput("INIT_VAL")
