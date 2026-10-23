@@ -36,7 +36,13 @@
   <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
     <category name="Module & Ports" colour="#00E5FF">
       <block type="verilog_module"></block>
-      <block type="verilog_port"></block>
+      <block type="verilog_port">
+        <value name="INIT_VAL">
+          <shadow type="verilog_constant">
+            <field name="VAL">0</field>
+          </shadow>
+        </value>
+      </block>
       <block type="verilog_signal"></block>
       <block type="verilog_comment"></block>
     </category>
@@ -71,6 +77,7 @@
     </category>
     <category name="Literals & Values" colour="#FFD54F">
       <block type="verilog_numeric"></block>
+      <block type="verilog_constant"></block>
     </category>
     <category name="Testbench (Sim)" colour="#FF8C00">
       <block type="verilog_initial"></block>
@@ -95,7 +102,6 @@
       };
     }
 
-    // --- Block Definitions ---
     Blockly.Blocks['verilog_module'] = {
       init: function() {
         this.appendDummyInput().appendField("module").appendField(new Blockly.FieldTextInput("top_module"), "NAME");
@@ -122,9 +128,10 @@
               ["8-bit [7:0]", "8"], ["16-bit [15:0]", "16"], ["32-bit [31:0]", "32"]
             ]), "WIDTH")
             .appendField("name")
-            .appendField(new Blockly.FieldTextInput("sig"), "NAME")
-            .appendField("= init")
-            .appendField(new Blockly.FieldTextInput(""), "INIT_VAL");
+            .appendField(new Blockly.FieldTextInput("sig"), "NAME");
+        this.appendValueInput("INIT_VAL")
+            .appendField("= init");
+        this.setInputsInline(true);
         this.setPreviousStatement(true, ["verilog_port", "verilog_comment"]);
         this.setNextStatement(true, ["verilog_port", "verilog_comment"]);
         this.setColour("#4DB6AC");
@@ -416,7 +423,6 @@
       }
     };
 
-    // --- Generator Engine Initialization ---
     Blockly.Verilog = new Blockly.Generator('Verilog');
     Blockly.Verilog.ORDER_ATOMIC = 0;
     Blockly.Verilog.ORDER_NONE = 99;
@@ -430,10 +436,9 @@
       return (code || '') + (nextCode || '');
     };
 
-    Blockly.Verilog.forBlock = Object.create(null);
-
     function addVerilogGen(blockType, genFn) {
       Blockly.Verilog[blockType] = genFn;
+      if (!Blockly.Verilog.forBlock) Blockly.Verilog.forBlock = Object.create(null);
       Blockly.Verilog.forBlock[blockType] = genFn;
     }
 
@@ -470,13 +475,19 @@
           
           var widthVal = parseInt(declBlock.getFieldValue('WIDTH') || '1');
           var rawName = declBlock.getFieldValue('NAME') || 'sig';
-          var initVal = declBlock.getFieldValue('INIT_VAL') || '';
+          
+          // Retrieve initial value code from value input block
+          var initValCode = Blockly.Verilog.valueToCode(declBlock, 'INIT_VAL', Blockly.Verilog.ORDER_ATOMIC) || '';
+          initValCode = initValCode.trim();
+          if (initValCode.startsWith('(') && initValCode.endsWith(')')) {
+            initValCode = initValCode.substring(1, initValCode.length - 1).trim();
+          }
+          var initStr = initValCode ? " = " + initValCode : "";
           
           var pName = rawName.trim().replace(/[^a-zA-Z0-9_\[\]:\s=\-\+'"]/g, '');
           if (!pName) pName = 'sig';
           
           var widthStr = widthVal > 1 ? " [" + (widthVal - 1) + ":0]" : "";
-          var initStr = initVal ? " = " + initVal.trim() : "";
           var declStr = dirType + widthStr + " " + pName + initStr;
 
           if (dirType.startsWith('input') || dirType.startsWith('output') || dirType.startsWith('inout')) {
@@ -535,6 +546,20 @@
     addVerilogGen('verilog_assign', function(block) {
       var lhs = Blockly.Verilog.valueToCode(block, 'LHS', Blockly.Verilog.ORDER_ATOMIC) || 'unused_sig';
       var rhs = Blockly.Verilog.valueToCode(block, 'RHS', Blockly.Verilog.ORDER_ATOMIC) || "1'b0";
+      
+      var isInsideAlways = false;
+      var curr = block.getSurroundParent();
+      while(curr) {
+        if(curr.type === 'verilog_always_ff' || curr.type === 'verilog_always_comb' || curr.type === 'verilog_initial' || curr.type === 'verilog_for' || curr.type === 'verilog_if' || curr.type === 'verilog_case') {
+          isInsideAlways = true;
+          break;
+        }
+        curr = curr.getSurroundParent();
+      }
+
+      if (isInsideAlways) {
+        return "  " + lhs + " = " + rhs + "; // AUTO-CORRECTED from 'assign' to procedural '='\n";
+      }
       return "assign " + lhs + " = " + rhs + ";\n";
     });
 
@@ -686,16 +711,12 @@
     });
 
     window.generatedVerilog = "";
-    
-    // --- TOP-LEVEL SANITIZATION UPDATE ---
     function updateCode() {
       try { 
         var topBlocks = workspace.getTopBlocks(true);
         var codeList = [];
         for (var i = 0; i < topBlocks.length; i++) {
           var blk = topBlocks[i];
-          // STRICT FILTER: Ignore any stray/floating logic blocks outside the module.
-          // Verilog strictly requires logic to be nested inside a module definition.
           if (blk.type === 'verilog_module' || blk.type === 'verilog_comment') {
             codeList.push(Blockly.Verilog.blockToCode(blk));
           }

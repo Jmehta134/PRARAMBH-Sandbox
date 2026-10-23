@@ -252,15 +252,12 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
     DECLARED_SIGNALS.clear()
 
     # --- STRICT TOP-LEVEL SANITIZATION ---
-    # Strip away any stray, floating code outside of the module scope to prevent PyVerilog crashes.
     mod_match = re.search(r'\bmodule\b.*?\bendmodule\b', verilog_code, re.DOTALL)
     if mod_match:
         verilog_code = mod_match.group(0)
     elif verilog_code.strip():
-        # If no module exists but code is present, securely wrap it in a dummy module.
         verilog_code = f"module top_module;\n{verilog_code}\nendmodule"
     else:
-        # Empty file, return empty workspace
         return '<xml xmlns="https://developers.google.com/blockly/xml"></xml>'
 
     init_vals = {}
@@ -285,6 +282,10 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
             sys.stderr = old_stderr
             import traceback
             error_details = traceback.format_exc().strip().split('\n')[-1]
+            
+            if 'before: "assign"' in error_details:
+                return "PARSE_ERROR: You placed an 'assign' statement inside an 'always' block! In standard Verilog, 'assign' must go outside 'always'. Use procedural Assignment blocks (= or <=) inside 'always' instead."
+                
             return f"PARSE_ERROR: Syntax or mapping failure near -> {error_details}"
         finally:
             sys.stdout = old_stdout
@@ -343,7 +344,18 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                     ET.SubElement(blk, "field", name="DIR_TYPE").text = dir_type
                     ET.SubElement(blk, "field", name="WIDTH").text = width_val
                     ET.SubElement(blk, "field", name="NAME").text = sig_name
-                    ET.SubElement(blk, "field", name="INIT_VAL").text = init_vals.get(sig_name, "")
+                    
+                    # Parse INIT_VAL into value input element
+                    init_expr = init_vals.get(sig_name, "")
+                    if hasattr(decl, 'value') and decl.value is not None:
+                        v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
+                        v_elem.append(parse_ast_to_expression(decl.value))
+                    elif init_expr:
+                        v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
+                        const_blk = ET.Element("block", type="verilog_constant")
+                        ET.SubElement(const_blk, "field", name="VAL").text = init_expr
+                        v_elem.append(const_blk)
+
                     decl_blocks.append(blk)
 
         if module_def.items:
@@ -371,10 +383,16 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                             ET.SubElement(blk, "field", name="WIDTH").text = width_val
                             ET.SubElement(blk, "field", name="NAME").text = sig_name
                             
-                            init_val_str = init_vals.get(sig_name, "")
-                            if dtype in ('Parameter', 'Localparam') and hasattr(decl_item, 'value'):
-                                init_val_str = codegen.visit(decl_item.value).strip()
-                            ET.SubElement(blk, "field", name="INIT_VAL").text = init_val_str
+                            init_expr = init_vals.get(sig_name, "")
+                            if hasattr(decl_item, 'value') and decl_item.value is not None:
+                                v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
+                                v_elem.append(parse_ast_to_expression(decl_item.value))
+                            elif init_expr:
+                                v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
+                                const_blk = ET.Element("block", type="verilog_constant")
+                                ET.SubElement(const_blk, "field", name="VAL").text = init_expr
+                                v_elem.append(const_blk)
+
                             decl_blocks.append(blk)
 
                 elif itype == 'Always':
