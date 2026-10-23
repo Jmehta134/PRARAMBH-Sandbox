@@ -135,6 +135,30 @@ class SimulationEngine(QObject):
             f.write(tb)
 
     def compile_and_run(self, file_path):
+        """Fallback wrapper for main.py to prevent AttributeErrors."""
+        verilog_code = ""
+        
+        # Robust read loop to handle OneDrive file locks
+        for attempt in range(15):
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        verilog_code = f.read()
+                    if verilog_code.strip():
+                        break
+                except Exception:
+                    pass
+            QApplication.processEvents()
+            time.sleep(0.1)
+            
+        if not verilog_code.strip():
+            self.log_message.emit(f"Engine Error: Could not read {file_path} or file is empty.", "ERROR")
+            return
+            
+        # Pass the successfully read string to the new compiler
+        self.compile_verilog_string(verilog_code)
+    
+    def compile_verilog_string(self, verilog_code):
         # 1. Debounce rapid double-triggers from the UI
         if getattr(self, '_is_compiling', False):
             return
@@ -143,43 +167,20 @@ class SimulationEngine(QObject):
         try:
             self.cleanup_previous_process()
 
-            verilog_code = ""
-            file_read_success = False
-            
-            # 2. Wait up to 1.5s for the JS WebEngine to finish writing the file asynchronously
-            for attempt in range(15):
-                if os.path.exists(file_path):
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            verilog_code = f.read()
-                        
-                        if verilog_code.strip():
-                            file_read_success = True
-                            break
-                    except Exception:
-                        pass
-                
-                # Process UI events so the WebEngine isn't frozen while writing the file
-                QApplication.processEvents()
-                time.sleep(0.1)
-
-            if not file_read_success:
-                if os.path.exists(file_path):
-                    if not verilog_code.strip():
-                        self.log_message.emit("Canvas is empty. No hardware logic generated to compile.", "WARN")
-                    else:
-                        self.log_message.emit(f"Engine Error: Access denied to {file_path}. File may be in use.", "ERROR")
-                else:
-                    self.log_message.emit(f"Engine Error: File was not found on disk at {file_path}.", "ERROR")
+            # 2. Immediately check if we have valid code from memory
+            if not verilog_code or not verilog_code.strip():
+                self.log_message.emit("Canvas is empty. No hardware logic generated to compile.", "WARN")
                 return
 
             parsed = self.parse_verilog_content(verilog_code)
             self.parsed_design.emit(parsed)
+            
+            # generate_embedded_testbench handles writing the string to auto_sandbox_tb.v
             self.generate_embedded_testbench(parsed, verilog_code)
             
             self.log_message.emit(f"Parsed and prepared inline harness for module: '{parsed['module_name']}'", "INFO")
             
-            # 3. Synchronous compilation pass
+            # 3. Synchronous compilation pass using the generated local file
             compile_proc = QProcess()
             compile_proc.start(self.iverilog_path, ["-g2012", "-o", "sim_build.vvp", "auto_sandbox_tb.v"])
             compile_proc.waitForFinished(5000)

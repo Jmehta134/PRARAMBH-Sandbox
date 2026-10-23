@@ -36,13 +36,7 @@
   <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
     <category name="Module & Ports" colour="#00E5FF">
       <block type="verilog_module"></block>
-      <block type="verilog_port">
-        <value name="INIT_VAL">
-          <shadow type="verilog_constant">
-            <field name="VAL">0</field>
-          </shadow>
-        </value>
-      </block>
+      <block type="verilog_port"></block>
       <block type="verilog_signal"></block>
       <block type="verilog_comment"></block>
     </category>
@@ -77,7 +71,6 @@
     </category>
     <category name="Literals & Values" colour="#FFD54F">
       <block type="verilog_numeric"></block>
-      <block type="verilog_constant"></block>
     </category>
     <category name="Testbench (Sim)" colour="#FF8C00">
       <block type="verilog_initial"></block>
@@ -336,14 +329,6 @@
       }
     };
 
-    Blockly.Blocks['verilog_constant'] = {
-      init: function() {
-        this.appendDummyInput().appendField("val:").appendField(new Blockly.FieldTextInput("1'b0"), "VAL");
-        this.setOutput(true, null);
-        this.setColour("#FFD54F");
-      }
-    };
-
     Blockly.Blocks['verilog_numeric'] = {
       init: function() {
         this.appendDummyInput()
@@ -476,7 +461,6 @@
           var widthVal = parseInt(declBlock.getFieldValue('WIDTH') || '1');
           var rawName = declBlock.getFieldValue('NAME') || 'sig';
           
-          // Retrieve initial value code from value input block
           var initValCode = Blockly.Verilog.valueToCode(declBlock, 'INIT_VAL', Blockly.Verilog.ORDER_ATOMIC) || '';
           initValCode = initValCode.trim();
           if (initValCode.startsWith('(') && initValCode.endsWith(')')) {
@@ -606,10 +590,6 @@
       var a = Blockly.Verilog.valueToCode(block, 'A', Blockly.Verilog.ORDER_ATOMIC) || '0';
       var b = Blockly.Verilog.valueToCode(block, 'B', Blockly.Verilog.ORDER_ATOMIC) || '0';
       return ["{" + a + ", " + b + "}", Blockly.Verilog.ORDER_ATOMIC];
-    });
-
-    addVerilogGen('verilog_constant', function(block) {
-      return [block.getFieldValue('VAL') || "1'b0", Blockly.Verilog.ORDER_ATOMIC];
     });
 
     addVerilogGen('verilog_numeric', function(block) {
@@ -795,6 +775,20 @@
         updateCode();
       } catch (e) { 
         console.error("Workspace append failed: ", e); 
+      }
+    };
+
+    // DIRECT MEMORY SAVE FUNCTION
+    // Bind your Save Button click event to this function instead of saving to a file directly.
+    window.saveAndCompile = function() {
+      var currentCode = window.generatedVerilog;
+      if (!currentCode || !currentCode.trim()) {
+        console.warn("No code to compile.");
+        return;
+      }
+      // Call the Python backend directly with the string
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.compile_verilog_string(currentCode);
       }
     };
   </script>

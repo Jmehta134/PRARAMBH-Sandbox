@@ -20,7 +20,11 @@ def chain_xml_blocks(parent_stmt, block_list):
 
 def parse_ast_to_expression(node):
     if node is None:
-        return ET.Element("block", type="verilog_constant")
+        num_blk = ET.Element("block", type="verilog_numeric")
+        ET.SubElement(num_blk, "field", name="WIDTH").text = "1"
+        ET.SubElement(num_blk, "field", name="BASE").text = "b"
+        ET.SubElement(num_blk, "field", name="VAL").text = "0"
+        return num_blk
     
     node_type = type(node).__name__
 
@@ -28,15 +32,9 @@ def parse_ast_to_expression(node):
         return parse_ast_to_expression(node.var)
 
     if node_type == 'Identifier':
-        sig_name = node.name
-        if sig_name in DECLARED_SIGNALS or sig_name.isidentifier():
-            sig_blk = ET.Element("block", type="verilog_signal")
-            ET.SubElement(sig_blk, "field", name="SIG").text = sig_name
-            return sig_blk
-        else:
-            const_blk = ET.Element("block", type="verilog_constant")
-            ET.SubElement(const_blk, "field", name="VAL").text = sig_name
-            return const_blk
+        sig_blk = ET.Element("block", type="verilog_signal")
+        ET.SubElement(sig_blk, "field", name="SIG").text = node.name
+        return sig_blk
 
     elif node_type in ('IntConst', 'Number', 'Constant'):
         val_str = str(node.value)
@@ -115,9 +113,31 @@ def parse_ast_to_expression(node):
         v_a.append(parse_ast_to_expression(node.right if hasattr(node, 'right') else node.factor))
         return unop_blk
 
-    const_blk = ET.Element("block", type="verilog_constant")
-    ET.SubElement(const_blk, "field", name="VAL").text = codegen.visit(node).strip()
-    return const_blk
+    fallback_str = codegen.visit(node).strip()
+    if fallback_str and (fallback_str[0].isdigit() or "'" in fallback_str):
+        num_blk = ET.Element("block", type="verilog_numeric")
+        w, b, v = "32", "d", fallback_str
+        if "'" in fallback_str:
+            parts = fallback_str.split("'")
+            w = parts[0] if parts[0] else "32"
+            if len(parts) > 1 and len(parts[1]) > 0:
+                base_char = parts[1][0].lower()
+                if base_char == 's':
+                    b = parts[1][1].lower() if len(parts[1]) > 1 else 'd'
+                    v = parts[1][2:]
+                else:
+                    b = base_char
+                    v = parts[1][1:]
+        else:
+            v = fallback_str
+        ET.SubElement(num_blk, "field", name="WIDTH").text = w
+        ET.SubElement(num_blk, "field", name="BASE").text = b
+        ET.SubElement(num_blk, "field", name="VAL").text = v
+        return num_blk
+    else:
+        sig_blk = ET.Element("block", type="verilog_signal")
+        ET.SubElement(sig_blk, "field", name="SIG").text = fallback_str if fallback_str else "0"
+        return sig_blk
 
 def parse_ast_statements(statements):
     blocks = []
@@ -251,7 +271,6 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
     global DECLARED_SIGNALS
     DECLARED_SIGNALS.clear()
 
-    # --- STRICT TOP-LEVEL SANITIZATION ---
     mod_match = re.search(r'\bmodule\b.*?\bendmodule\b', verilog_code, re.DOTALL)
     if mod_match:
         verilog_code = mod_match.group(0)
@@ -282,10 +301,8 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
             sys.stderr = old_stderr
             import traceback
             error_details = traceback.format_exc().strip().split('\n')[-1]
-            
             if 'before: "assign"' in error_details:
                 return "PARSE_ERROR: You placed an 'assign' statement inside an 'always' block! In standard Verilog, 'assign' must go outside 'always'. Use procedural Assignment blocks (= or <=) inside 'always' instead."
-                
             return f"PARSE_ERROR: Syntax or mapping failure near -> {error_details}"
         finally:
             sys.stdout = old_stdout
@@ -323,6 +340,38 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
         except Exception:
             return "8" 
 
+    def parse_init_val(blk, decl_item, sig_name):
+        init_expr = init_vals.get(sig_name, "")
+        if hasattr(decl_item, 'value') and decl_item.value is not None:
+            v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
+            v_elem.append(parse_ast_to_expression(decl_item.value))
+        elif init_expr:
+            v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
+            if init_expr.isdigit() or "'" in init_expr:
+                num_blk = ET.Element("block", type="verilog_numeric")
+                w, b, v = "32", "d", init_expr
+                if "'" in init_expr:
+                    parts = init_expr.split("'")
+                    w = parts[0] if parts[0] else "32"
+                    if len(parts) > 1 and len(parts[1]) > 0:
+                        base_char = parts[1][0].lower()
+                        if base_char == 's':
+                            b = parts[1][1].lower() if len(parts[1]) > 1 else 'd'
+                            v = parts[1][2:]
+                        else:
+                            b = base_char
+                            v = parts[1][1:]
+                else:
+                    v = init_expr
+                ET.SubElement(num_blk, "field", name="WIDTH").text = w
+                ET.SubElement(num_blk, "field", name="BASE").text = b
+                ET.SubElement(num_blk, "field", name="VAL").text = v
+                v_elem.append(num_blk)
+            else:
+                sig_blk = ET.Element("block", type="verilog_signal")
+                ET.SubElement(sig_blk, "field", name="SIG").text = init_expr
+                v_elem.append(sig_blk)
+
     if module_def:
         if module_def.portlist and module_def.portlist.ports:
             for port in module_def.portlist.ports:
@@ -345,17 +394,7 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                     ET.SubElement(blk, "field", name="WIDTH").text = width_val
                     ET.SubElement(blk, "field", name="NAME").text = sig_name
                     
-                    # Parse INIT_VAL into value input element
-                    init_expr = init_vals.get(sig_name, "")
-                    if hasattr(decl, 'value') and decl.value is not None:
-                        v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
-                        v_elem.append(parse_ast_to_expression(decl.value))
-                    elif init_expr:
-                        v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
-                        const_blk = ET.Element("block", type="verilog_constant")
-                        ET.SubElement(const_blk, "field", name="VAL").text = init_expr
-                        v_elem.append(const_blk)
-
+                    parse_init_val(blk, decl, sig_name)
                     decl_blocks.append(blk)
 
         if module_def.items:
@@ -383,16 +422,7 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                             ET.SubElement(blk, "field", name="WIDTH").text = width_val
                             ET.SubElement(blk, "field", name="NAME").text = sig_name
                             
-                            init_expr = init_vals.get(sig_name, "")
-                            if hasattr(decl_item, 'value') and decl_item.value is not None:
-                                v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
-                                v_elem.append(parse_ast_to_expression(decl_item.value))
-                            elif init_expr:
-                                v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
-                                const_blk = ET.Element("block", type="verilog_constant")
-                                ET.SubElement(const_blk, "field", name="VAL").text = init_expr
-                                v_elem.append(const_blk)
-
+                            parse_init_val(blk, decl_item, sig_name)
                             decl_blocks.append(blk)
 
                 elif itype == 'Always':
