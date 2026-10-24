@@ -12,21 +12,7 @@ module example_gauge_adc (
     end
 
     always @(posedge clk) begin
-        if (!dir) begin
-            if (gauge_out >= (12'hFFF - STEP)) begin
-                gauge_out <= 12'hFFF;
-                dir <= 1'b1;
-            end else begin
-                gauge_out <= gauge_out + STEP;
-            end
-        end else begin
-            if (gauge_out <= STEP) begin
-                gauge_out <= 12'h000;
-                dir <= 1'b0;
-            end else begin
-                gauge_out <= gauge_out - STEP;
-            end
-        end
+        gauge_out <= gauge_out + STEP;
     end
 
 endmodule

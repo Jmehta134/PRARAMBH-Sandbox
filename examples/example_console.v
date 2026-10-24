@@ -5,7 +5,7 @@ module example_console (
 
   reg [7:0] counter;
 
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
       if (rst) begin
         counter <= 8'd0;
       end else begin
@@ -13,11 +13,11 @@ module example_console (
         $display("Clock Pulse: %d", counter);
       end
   end
-
+  
   initial begin
       counter = 8'd0;
       $monitor("Counter changed to: (0x%h)", counter);
   end
-
+  
 
 endmodule

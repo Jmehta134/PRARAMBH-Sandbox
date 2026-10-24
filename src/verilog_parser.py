@@ -325,6 +325,13 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
     decl_blocks = []
     body_blocks = []
 
+    for single_line, multi_line in re.findall(r'//([^\n]*)|/\*(.*?)\*/', verilog_code, re.DOTALL):
+        cmt_text = (single_line or multi_line).strip()
+        if cmt_text:
+            cmt_blk = ET.Element("block", type="verilog_comment")
+            ET.SubElement(cmt_blk, "field", name="TEXT").text = cmt_text
+            body_blocks.append(cmt_blk)
+
     def get_width_string(width_obj):
         if not width_obj: return "1"
         try:
