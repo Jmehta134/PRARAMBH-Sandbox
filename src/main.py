@@ -724,8 +724,9 @@ class UnifiedSandboxIDE(QMainWindow):
     def distribute_parsed_data(self, parsed):
         self.left_pane.keypad.set_available_inputs(parsed['inputs'])
         self.right_pane.keypad.set_available_inputs(parsed['inputs'])
-        self.left_pane.register_monitor.set_available_signals(parsed['internals'])
-        self.right_pane.register_monitor.set_available_signals(parsed['internals'])
+        all_signals = parsed['inputs'] + parsed['outputs'] + parsed['internals']
+        self.left_pane.register_monitor.set_available_signals(all_signals)
+        self.right_pane.register_monitor.set_available_signals(all_signals)
         self.left_pane.slider_adc.set_available_inputs(parsed['inputs'])
         self.right_pane.slider_adc.set_available_inputs(parsed['inputs'])
         self.left_pane.gauge_adc.set_available_signals(parsed['outputs'] + parsed['internals'])

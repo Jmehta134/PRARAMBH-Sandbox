@@ -18,11 +18,11 @@ class RegisterRow(QFrame):
             QComboBox { font-size: 13px; font-weight: bold; color: #333333; background-color: #FFFFFF; border: 1px solid #AAAAAA; border-radius: 4px; padding-left: 10px; }
         """)
         
-        self.lcd = QLCDNumber(4)
+        self.lcd = QLCDNumber(8)
         self.lcd.setHexMode()
         self.lcd.setFixedHeight(45)
         self.lcd.setStyleSheet("QLCDNumber { background-color: #1E1E1E; color: #00FF00; border: 2px inset #555555; border-radius: 4px; }")
-        self.lcd.display("0000")
+        self.lcd.display("")
         
         layout.addWidget(self.combo)
         layout.addWidget(self.lcd, stretch=1)
@@ -44,31 +44,30 @@ class RegisterMonitorView(QWidget):
             layout.addWidget(row)
         layout.addStretch()
 
-    def set_available_signals(self, internals):
-        """Populates all dropdowns with the internal signals found in the Verilog code."""
-        # FIXED: Removed the ugly 'dut.' prefix!
+    def set_available_signals(self, signals_list):
+        """Populates all dropdowns with the input, output, wire, and reg signals found in the Verilog code."""
         for row in self.rows:
-            row.update_options(internals)
+            row.update_options(signals_list)
 
     def sync_data(self, state_dict):
         """Reads the currently selected signal in the dropdown and looks it up in the live data."""
         for row in self.rows:
             selected_sig = row.combo.currentText()
             if selected_sig in state_dict:
-                row.lcd.display(f"{state_dict[selected_sig]:04X}")
+                val = int(state_dict[selected_sig]) & 0xFFFFFFFF
+                row.lcd.display(f"{val:X}")
             else:
-                row.lcd.display("0000")
+                row.lcd.display("")
 
     def show_help(self):
         msg = QMessageBox(self)
-        msg.setWindowTitle("Learner Guide: Dynamic Register Probe")
+        msg.setWindowTitle("Learner Guide: Dynamic Signal Probe")
         msg.setText(
-            "<b>Dynamic Register Probe Mapping</b><br><br>"
-            "Unlike fixed I/O ports, this tool uses AST introspection to scan your entire Verilog module for internal registers.<br><br>"
+            "<b>Dynamic Signal Probe Mapping</b><br><br>"
+            "This tool uses AST introspection to scan your entire Verilog module for signal declarations.<br><br>"
             "<b>Monitored Signals:</b><br>"
-            "• Any internal <code>reg</code>, <code>wire</code>, or <code>integer</code> declared in your active file.<br><br>"
+            "• Any <code>input</code>, <code>output</code>, <code>reg</code>, <code>wire</code>, or <code>integer</code> declared in your active file.<br><br>"
             "<b>How it works:</b><br>"
-            "Select any signal from the dropdown menu (e.g., <code>dut.counter</code> or <code>dut.state</code>) "
-            "to read its raw Hex value from the simulation engine on every clock pulse."
+            "Select any signal from the dropdown menu to read its raw Hex value from the simulation engine on every clock pulse. Data automatically scales up to 32 bits."
         )
         msg.exec_()

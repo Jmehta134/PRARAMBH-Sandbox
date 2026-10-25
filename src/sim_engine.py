@@ -91,8 +91,8 @@ class SimulationEngine(QObject):
         ports = [f".{p}({p})" for p in parsed['inputs'] + parsed['outputs']]
         tb += "        " + ",\n        ".join(ports) + "\n    );\n\n"
         
-        self.verilog_signals = parsed['outputs'] + [f"dut.{i}" for i in parsed['internals']]
-        self.ui_signals = parsed['outputs'] + parsed['internals']
+        self.verilog_signals = parsed['inputs'] + parsed['outputs'] + [f"dut.{i}" for i in parsed['internals']]
+        self.ui_signals = parsed['inputs'] + parsed['outputs'] + parsed['internals']
         
         tb += "    integer cmd_id;\n"
         tb += "    integer cmd_val;\n\n"
