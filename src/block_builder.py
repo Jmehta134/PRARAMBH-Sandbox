@@ -150,16 +150,21 @@ class VisualBlockBuilder(QWidget):
             self.lbl_filename.setStyleSheet("color: #888888; font-family: monospace; font-weight: bold;")
 
     def load_external_file(self, path):
-        if not path or not os.path.exists(path): return
-        if path == self.current_file_path: return
+        if not path or not os.path.exists(path): return None
+        if path == self.current_file_path: return None
 
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
 
         xml_data = verilog_to_blockly_xml(content) if path.endswith('.v') else content
+        
+        if xml_data.startswith("PARSE_ERROR:"):
+            return xml_data  # Return the error to the caller instead of crashing JS
+
         escaped_xml = xml_data.replace('\\', '\\\\').replace('`', '\\`')
         self.web_view.page().runJavaScript(f"window.importWorkspace(`{escaped_xml}`);")
         self.set_current_file(path, emit_signal=False)
+        return "SUCCESS"
 
     def new_file(self):
         self.set_current_file(None)
@@ -238,5 +243,5 @@ class VisualBlockBuilder(QWidget):
             QMessageBox.critical(self, "Save Error", f"Failed to save file:\n{str(e)}")
 
     def open_help_webpage(self):
-        url = QUrl("https://github.com")
+        url = QUrl("https://github.com/Jmehta134/PRARAMBH-Sandbox/blob/main/GUIDE.md")
         QDesktopServices.openUrl(url)

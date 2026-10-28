@@ -253,6 +253,26 @@ QComboBox#PaneTitleDropdown QAbstractItemView {
     padding: 4px;
     outline: none;
 }
+/* Compile Play Button */
+QPushButton#CompilePlayBtn {
+    background-color: #28A745;
+    color: white;
+    border: 1px solid #218838;
+    border-radius: 4px;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 0px;
+}
+QPushButton#CompilePlayBtn:hover {
+    background-color: #218838;
+    border: 1px solid #1e7e34;
+}
+QPushButton#CompilePlayBtn:pressed {
+    background-color: #1e7e34;
+    border: 1px solid #1c7430;
+    padding-top: 2px; /* slight indent on click */
+    padding-left: 2px;
+}
 """
 
 class TitleComboBox(QComboBox):
@@ -624,6 +644,15 @@ class UnifiedSandboxIDE(QMainWindow):
         
         header_layout.addStretch(1)
         
+        self.btn_compile_play = QPushButton("▶")
+        self.btn_compile_play.setObjectName("CompilePlayBtn")
+        self.btn_compile_play.setFixedSize(35, 35)
+        self.btn_compile_play.setToolTip("Compile and Run Workspace")
+        self.btn_compile_play.setCursor(Qt.PointingHandCursor)
+        self.btn_compile_play.clicked.connect(self.recompile_current_file)
+        header_layout.addWidget(self.btn_compile_play)
+        header_layout.addSpacing(15)
+        
         clk_label = QLabel("CLOCK ENGINE:")
         clk_label.setStyleSheet("font-weight: bold; color: #888888;")
         header_layout.addWidget(clk_label)
@@ -693,7 +722,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.target_verilog_file = file_path
         filename = os.path.basename(file_path)
         self.lbl_file.setText(f"Target: {filename}")
-        self.lbl_file.setStyleSheet("color: #1c1c1c; font-family: monospace; font-weight: bold;")
+        self.lbl_file.setStyleSheet("color: #333333; font-family: monospace; font-weight: bold;")
         self.engine.compile_and_run(file_path)
 
     def select_file(self):
@@ -702,10 +731,20 @@ class UnifiedSandboxIDE(QMainWindow):
             self.target_verilog_file = file_path
             filename = os.path.basename(file_path)
             self.lbl_file.setText(f"Target: {filename}")
-            self.lbl_file.setStyleSheet("color: #1c1c1c; font-family: monospace; font-weight: bold;")
+            self.lbl_file.setStyleSheet("color: #333333; font-family: monospace; font-weight: bold;")
             
-            self.full_block_builder.load_external_file(file_path)
+            # Check for general parsing errors
+            build_status = self.full_block_builder.load_external_file(file_path)
+            if isinstance(build_status, str) and build_status.startswith("PARSE_ERROR:"):
+                error_msg = build_status.replace("PARSE_ERROR:", "").strip()
+                self.broadcast_log(f"Visual Canvas Skipped for {filename}: {error_msg}", "WARNING")
+                
+            # Always run the simulation engine regardless of visual canvas success
             self.engine.compile_and_run(file_path)
+
+    def recompile_current_file(self):
+        if self.target_verilog_file:
+            self.engine.compile_and_run(self.target_verilog_file)
 
     def open_example_dialog(self):
         example_dir = self.get_examples_directory()
@@ -715,9 +754,15 @@ class UnifiedSandboxIDE(QMainWindow):
             self.target_verilog_file = dialog.selected_file_path
             filename = os.path.basename(dialog.selected_file_path)
             self.lbl_file.setText(f"Target: {filename}")
-            self.lbl_file.setStyleSheet("color: #00E5FF; font-family: monospace; font-weight: bold;")
+            self.lbl_file.setStyleSheet("color: #333333; font-family: monospace; font-weight: bold;")
             
-            self.full_block_builder.load_external_file(dialog.selected_file_path)
+            # Check for general parsing errors
+            build_status = self.full_block_builder.load_external_file(dialog.selected_file_path)
+            if isinstance(build_status, str) and build_status.startswith("PARSE_ERROR:"):
+                error_msg = build_status.replace("PARSE_ERROR:", "").strip()
+                self.broadcast_log(f"Visual Canvas Skipped for {filename}: {error_msg}", "WARNING")
+                
+            # Always run the simulation engine regardless of visual canvas success
             self.engine.compile_and_run(dialog.selected_file_path)
 
     # --- ENGINE BINDINGS ---
@@ -791,7 +836,7 @@ class UnifiedSandboxIDE(QMainWindow):
             self.clock_timer.start(interval)
 
     def open_help_webpage(self):
-        url = QUrl("https://github.com") 
+        url = QUrl("https://github.com/Jmehta134/PRARAMBH-Sandbox/blob/main/GUIDE.md") 
         QDesktopServices.openUrl(url)
 
     def get_examples_directory(self):

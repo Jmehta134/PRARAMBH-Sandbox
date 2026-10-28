@@ -67,6 +67,7 @@
       <block type="verilog_unop"></block>
       <block type="verilog_mux"></block>
       <block type="verilog_slice"></block>
+      <block type="verilog_pointer"></block>
       <block type="verilog_concat"></block>
     </category>
     <category name="Literals & Values" colour="#FFD54F">
@@ -309,6 +310,16 @@
       init: function() {
         this.appendValueInput("SIG");
         this.appendDummyInput().appendField("[").appendField(new Blockly.FieldTextInput("7"), "MSB").appendField(":").appendField(new Blockly.FieldTextInput("0"), "LSB").appendField("]");
+        this.setInputsInline(true);
+        this.setOutput(true, null);
+        this.setColour("#B39DDB");
+      }
+    };
+
+    Blockly.Blocks['verilog_pointer'] = {
+      init: function() {
+        this.appendValueInput("SIG");
+        this.appendDummyInput().appendField("[").appendField(new Blockly.FieldTextInput("0"), "INDEX").appendField("]");
         this.setInputsInline(true);
         this.setOutput(true, null);
         this.setColour("#B39DDB");
@@ -581,6 +592,12 @@
       var msb = block.getFieldValue('MSB') || '7';
       var lsb = block.getFieldValue('LSB') || '0';
       return [sig + "[" + msb + ":" + lsb + "]", Blockly.Verilog.ORDER_ATOMIC];
+    });
+
+    addVerilogGen('verilog_pointer', function(block) {
+      var sig = Blockly.Verilog.valueToCode(block, 'SIG', Blockly.Verilog.ORDER_ATOMIC) || '0';
+      var idx = block.getFieldValue('INDEX') || '0';
+      return [sig + "[" + idx + "]", Blockly.Verilog.ORDER_ATOMIC];
     });
 
     addVerilogGen('verilog_concat', function(block) {

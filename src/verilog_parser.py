@@ -18,7 +18,7 @@ def chain_xml_blocks(parent_stmt, block_list):
         nxt.append(next_blk)
         curr = next_blk
 
-def parse_ast_to_expression(node):
+def parse_ast_to_expression(node, context_width="32"):
     if node is None:
         num_blk = ET.Element("block", type="verilog_numeric")
         ET.SubElement(num_blk, "field", name="WIDTH").text = "1"
@@ -29,7 +29,7 @@ def parse_ast_to_expression(node):
     node_type = type(node).__name__
 
     if node_type in ('Lvalue', 'Rvalue'):
-        return parse_ast_to_expression(node.var)
+        return parse_ast_to_expression(node.var, context_width)
 
     if node_type == 'Identifier':
         sig_blk = ET.Element("block", type="verilog_signal")
@@ -39,10 +39,10 @@ def parse_ast_to_expression(node):
     elif node_type in ('IntConst', 'Number', 'Constant'):
         val_str = str(node.value)
         num_blk = ET.Element("block", type="verilog_numeric")
-        w, b, v = "8", "d", val_str
+        w, b, v = context_width, "d", val_str  # Use context_width dynamically
         if "'" in val_str:
             parts = val_str.split("'")
-            w = parts[0] if parts[0] else "32"
+            w = parts[0] if parts[0] else context_width
             if len(parts) > 1 and len(parts[1]) > 0:
                 base_char = parts[1][0].lower()
                 if base_char == 's': 
@@ -56,22 +56,28 @@ def parse_ast_to_expression(node):
         ET.SubElement(num_blk, "field", name="VAL").text = v
         return num_blk
 
-    elif node_type in ('Pointer', 'Partselect'):
+    elif node_type == 'Partselect':
         slice_blk = ET.Element("block", type="verilog_slice")
         v_sig = ET.SubElement(slice_blk, "value", name="SIG")
         var_node = node.var if hasattr(node, 'var') else node
         v_sig.append(parse_ast_to_expression(var_node))
         
-        idx_msb, idx_lsb = "0", "0"
-        if hasattr(node, 'ptr'):
-            idx_msb = idx_lsb = codegen.visit(node.ptr).strip()
-        elif hasattr(node, 'msb') and hasattr(node, 'lsb'):
-            idx_msb = codegen.visit(node.msb).strip()
-            idx_lsb = codegen.visit(node.lsb).strip()
-            
+        idx_msb = codegen.visit(node.msb).strip() if hasattr(node, 'msb') else "0"
+        idx_lsb = codegen.visit(node.lsb).strip() if hasattr(node, 'lsb') else "0"
+        
         ET.SubElement(slice_blk, "field", name="MSB").text = idx_msb
         ET.SubElement(slice_blk, "field", name="LSB").text = idx_lsb
         return slice_blk
+
+    elif node_type == 'Pointer':
+        ptr_blk = ET.Element("block", type="verilog_pointer")
+        v_sig = ET.SubElement(ptr_blk, "value", name="SIG")
+        var_node = node.var if hasattr(node, 'var') else node
+        v_sig.append(parse_ast_to_expression(var_node))
+        
+        idx_ptr = codegen.visit(node.ptr).strip() if hasattr(node, 'ptr') else "0"
+        ET.SubElement(ptr_blk, "field", name="INDEX").text = idx_ptr
+        return ptr_blk
 
     elif node_type == 'Concat':
         concat_blk = ET.Element("block", type="verilog_concat")
@@ -108,7 +114,9 @@ def parse_ast_to_expression(node):
 
     elif node_type in ('Ulnot', 'Not', 'Unot'):
         unop_blk = ET.Element("block", type="verilog_unop")
-        ET.SubElement(unop_blk, "field", name="OP").text = "!"
+        # Distinguish between bitwise NOT (~/Unot) and logical NOT (!/Ulnot/Not)
+        op_char = "~" if node_type == 'Unot' else "!"
+        ET.SubElement(unop_blk, "field", name="OP").text = op_char
         v_a = ET.SubElement(unop_blk, "value", name="A")
         v_a.append(parse_ast_to_expression(node.right if hasattr(node, 'right') else node.factor))
         return unop_blk
@@ -116,10 +124,10 @@ def parse_ast_to_expression(node):
     fallback_str = codegen.visit(node).strip()
     if fallback_str and (fallback_str[0].isdigit() or "'" in fallback_str):
         num_blk = ET.Element("block", type="verilog_numeric")
-        w, b, v = "32", "d", fallback_str
+        w, b, v = context_width, "d", fallback_str  # Use context_width dynamically
         if "'" in fallback_str:
             parts = fallback_str.split("'")
-            w = parts[0] if parts[0] else "32"
+            w = parts[0] if parts[0] else context_width
             if len(parts) > 1 and len(parts[1]) > 0:
                 base_char = parts[1][0].lower()
                 if base_char == 's':
@@ -335,31 +343,32 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
     def get_width_string(width_obj):
         if not width_obj: return "1"
         try:
-            msb = int(getattr(width_obj.msb, 'value', 0))
-            lsb = int(getattr(width_obj.lsb, 'value', 0))
-            calc = abs(msb - lsb) + 1
-            if calc <= 1: return "1"
-            elif calc <= 2: return "2"
-            elif calc <= 4: return "4"
-            elif calc <= 8: return "8"
-            elif calc <= 16: return "16"
-            else: return "32"
+            # Safely extract the string representation of the MSB and LSB
+            msb_str = codegen.visit(width_obj.msb).strip()
+            lsb_str = codegen.visit(width_obj.lsb).strip()
+            
+            if msb_str.isdigit() and lsb_str.isdigit():
+                calc = abs(int(msb_str) - int(lsb_str)) + 1
+                return str(calc)
+            return "32" # Fallback for parameterized widths (e.g., WIDTH-1)
         except Exception:
-            return "8" 
+            return "32"
 
-    def parse_init_val(blk, decl_item, sig_name):
+    def parse_init_val(blk, decl_item, sig_name, port_width="1"):
         init_expr = init_vals.get(sig_name, "")
         if hasattr(decl_item, 'value') and decl_item.value is not None:
             v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
-            v_elem.append(parse_ast_to_expression(decl_item.value))
+            # Feed port_width down so un-sized numbers inherit the register's actual size
+            val_node = parse_ast_to_expression(decl_item.value, context_width=port_width)
+            v_elem.append(val_node)
         elif init_expr:
             v_elem = ET.SubElement(blk, "value", name="INIT_VAL")
             if init_expr.isdigit() or "'" in init_expr:
                 num_blk = ET.Element("block", type="verilog_numeric")
-                w, b, v = "32", "d", init_expr
+                w, b, v = port_width, "d", init_expr
                 if "'" in init_expr:
                     parts = init_expr.split("'")
-                    w = parts[0] if parts[0] else "32"
+                    w = parts[0] if parts[0] else port_width
                     if len(parts) > 1 and len(parts[1]) > 0:
                         base_char = parts[1][0].lower()
                         if base_char == 's':
@@ -401,7 +410,7 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                     ET.SubElement(blk, "field", name="WIDTH").text = width_val
                     ET.SubElement(blk, "field", name="NAME").text = sig_name
                     
-                    parse_init_val(blk, decl, sig_name)
+                    parse_init_val(blk, decl, sig_name, width_val)
                     decl_blocks.append(blk)
 
         if module_def.items:
@@ -429,7 +438,7 @@ def verilog_to_blockly_xml(verilog_code: str) -> str:
                             ET.SubElement(blk, "field", name="WIDTH").text = width_val
                             ET.SubElement(blk, "field", name="NAME").text = sig_name
                             
-                            parse_init_val(blk, decl_item, sig_name)
+                            parse_init_val(blk, decl_item, sig_name, width_val)
                             decl_blocks.append(blk)
 
                 elif itype == 'Always':
