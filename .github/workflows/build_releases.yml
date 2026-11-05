@@ -3,51 +3,57 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*' # Triggers on version tags (e.g., v1.0.3)
+      - 'v*'
 
 permissions:
-  contents: write # Allows committing version.json and creating releases
+  contents: write
 
 jobs:
   update-manifest:
     name: Auto-Update version.json
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Main
         uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: Generate New version.json
+      - name: Generate version.json
+        shell: bash
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          cat <<EOF > version.json
+          VERSION="${GITHUB_REF_NAME#v}"
+          cat > version.json <<EOF
           {
-            "version": "$VERSION",
-            "download_url_windows": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/sandbox_${{ github.ref_name }}_windows.zip",
-            "download_url_linux": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/sandbox_${{ github.ref_name }}_linux.zip"
+            "version": "${VERSION}",
+            "download_url_windows": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/sandbox_${GITHUB_REF_NAME}_windows.zip",
+            "download_url_linux": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/sandbox_${GITHUB_REF_NAME}_linux.zip"
           }
           EOF
 
-      - name: Commit and Push to Main
+      - name: Commit and Push version.json
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add version.json
-          git commit -m "Auto-update version.json for ${{ github.ref_name }}" || echo "No changes to commit"
-          git push origin main
+          git commit -m "Auto-update version.json for ${GITHUB_REF_NAME}" || echo "No version.json changes to commit"
+          git push origin HEAD:main
 
   build-and-release:
     needs: update-manifest
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             installer_bin: Installer.exe
             sandbox_zip: sandbox_${{ github.ref_name }}_windows.zip
-          - os: ubuntu-22.04
+
+          - os: ubuntu-24.04
             installer_bin: Installer
             sandbox_zip: sandbox_${{ github.ref_name }}_linux.zip
 
@@ -60,47 +66,396 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install System Dependencies (Linux)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # ---------------------------------------------------------
+      # WINDOWS: install the complete OSS CAD Suite into:
+      # bin/windows/bin, bin/windows/share, bin/windows/environment.*
+      # ---------------------------------------------------------
+
+      - name: Install Windows OSS CAD Suite
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $target = Join-Path $env:GITHUB_WORKSPACE 'bin\windows'
+          $extract = Join-Path $env:RUNNER_TEMP 'oss-cad-suite-extract'
+          New-Item -ItemType Directory -Force -Path $target, $extract | Out-Null
+
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+
+          $release = Invoke-RestMethod `
+            -Uri 'https://api.github.com/repos/YosysHQ/oss-cad-suite-build/releases/latest' `
+            -Headers $headers
+
+          $asset = $release.assets |
+            Where-Object { $_.name -match '^oss-cad-suite-windows-x64-.*\.exe$' } |
+            Select-Object -First 1
+
+          if (-not $asset) {
+            throw "No Windows x64 OSS CAD Suite archive found in release $($release.tag_name)."
+          }
+
+          $archive = Join-Path $env:RUNNER_TEMP $asset.name
+          Write-Host "Downloading OSS CAD Suite $($release.tag_name): $($asset.name)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $archive
+
+          $sevenZipCommand = Get-Command 7z.exe -ErrorAction SilentlyContinue
+          if (-not $sevenZipCommand) {
+            choco install 7zip --yes --no-progress
+            $sevenZipCommand = Get-Command 7z.exe -ErrorAction SilentlyContinue
+          }
+          if (-not $sevenZipCommand) {
+            throw '7-Zip was not found after installation.'
+          }
+
+          & $sevenZipCommand.Source x $archive "-o$extract" -y | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+            throw "7-Zip extraction failed with exit code $LASTEXITCODE."
+          }
+
+          $yosysFile = Get-ChildItem -LiteralPath $extract -Filter 'yosys.exe' -File -Recurse |
+            Where-Object { $_.Directory.Name -eq 'bin' } |
+            Select-Object -First 1
+
+          if (-not $yosysFile) {
+            throw 'Could not locate bin\yosys.exe inside the OSS CAD Suite archive.'
+          }
+
+          $suiteRoot = $yosysFile.Directory.Parent.FullName
+          Write-Host "Extracted suite root: $suiteRoot"
+
+          # Copy all suite files. Yosys needs the accompanying share data,
+          # helper binaries, DLLs and environment scripts as well as yosys.exe.
+          Get-ChildItem -LiteralPath $suiteRoot -Force | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $target -Recurse -Force
+          }
+
+          if (-not (Test-Path (Join-Path $target 'bin\yosys.exe'))) {
+            throw 'Yosys was not copied to bin\windows\bin.'
+          }
+          if (-not (Test-Path (Join-Path $target 'environment.ps1'))) {
+            throw 'OSS CAD Suite environment.ps1 is missing from the extracted suite.'
+          }
+
+          # Activate the official suite environment and verify Yosys starts.
+          . (Join-Path $target 'environment.ps1')
+          & (Join-Path $target 'bin\yosys.exe') -V
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Bundled Windows Yosys failed its version check.'
+          }
+
+      - name: Install Windows Node.js and Netlistsvg
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $toolDir = Join-Path $env:GITHUB_WORKSPACE 'bin\windows\bin'
+          New-Item -ItemType Directory -Force -Path $toolDir | Out-Null
+
+          $nodeCommand = Get-Command node.exe -CommandType Application -ErrorAction Stop
+          Copy-Item -LiteralPath $nodeCommand.Source -Destination (Join-Path $toolDir 'node.exe') -Force
+
+          # npm installs the package locally. RTLparser.py invokes the JS entry
+          # point with the bundled node.exe; it does not depend on a global npm install.
+          $packagePrefix = Join-Path $toolDir 'netlistsvg'
+          npm install --prefix $packagePrefix --no-audit --no-fund --save-exact netlistsvg@1.0.2
+          if ($LASTEXITCODE -ne 0) {
+            throw 'npm failed to install Netlistsvg.'
+          }
+
+          $entry = Join-Path $packagePrefix 'node_modules\netlistsvg\bin\netlistsvg.js'
+          if (-not (Test-Path $entry)) {
+            throw "Netlistsvg entry point not found: $entry"
+          }
+
+          & (Join-Path $toolDir 'node.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled Node.js failed its version check.' }
+
+      # ---------------------------------------------------------
+      # LINUX: install the complete OSS CAD Suite into:
+      # bin/linux/bin, bin/linux/share, bin/linux/environment
+      # ---------------------------------------------------------
+
+      - name: Install Linux OSS CAD Suite
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          TARGET="$GITHUB_WORKSPACE/bin/linux"
+          EXTRACT="$RUNNER_TEMP/oss-cad-suite-extract"
+          mkdir -p "$TARGET" "$EXTRACT"
+
+          RELEASE_JSON="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            https://api.github.com/repos/YosysHQ/oss-cad-suite-build/releases/latest)"
+
+          ASSET_URL="$(python -c '
+          import json, sys
+          release = json.loads(sys.argv[1])
+          matches = [
+              item["browser_download_url"]
+              for item in release.get("assets", [])
+              if item.get("name", "").startswith("oss-cad-suite-linux-x64-")
+              and item.get("name", "").endswith(".tgz")
+          ]
+          if not matches:
+              raise SystemExit("No Linux x64 OSS CAD Suite .tgz asset found")
+          print(matches[0])
+          ' "$RELEASE_JSON")"
+
+          echo "Downloading $ASSET_URL"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "$ASSET_URL" -o "$RUNNER_TEMP/oss-cad-suite.tgz"
+
+          tar -xzf "$RUNNER_TEMP/oss-cad-suite.tgz" -C "$EXTRACT"
+
+          YOSYS_PATH="$(find "$EXTRACT" -type f -path '*/bin/yosys' -print -quit)"
+          if [[ -z "$YOSYS_PATH" ]]; then
+            echo 'Could not locate bin/yosys inside the OSS CAD Suite archive.' >&2
+            exit 1
+          fi
+
+          SUITE_ROOT="$(dirname "$(dirname "$YOSYS_PATH")")"
+          echo "Extracted suite root: $SUITE_ROOT"
+
+          # Preserve the complete suite: environment, bin, share and libraries.
+          cp -a "$SUITE_ROOT/." "$TARGET/"
+
+          test -x "$TARGET/bin/yosys"
+          test -f "$TARGET/environment"
+
+          # Verify Yosys in the official suite environment.
+          source "$TARGET/environment"
+          "$TARGET/bin/yosys" -V
+
+      - name: Install Linux Node.js and Netlistsvg
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TOOL_DIR="$GITHUB_WORKSPACE/bin/linux/bin"
+          mkdir -p "$TOOL_DIR"
+
+          cp "$(command -v node)" "$TOOL_DIR/node"
+          chmod 755 "$TOOL_DIR/node"
+
+          PACKAGE_PREFIX="$TOOL_DIR/netlistsvg"
+          npm install --prefix "$PACKAGE_PREFIX" --no-audit --no-fund --save-exact netlistsvg@1.0.2
+
+          ENTRY="$PACKAGE_PREFIX/node_modules/netlistsvg/bin/netlistsvg.js"
+          test -f "$ENTRY"
+          "$TOOL_DIR/node" --version
+
+      # ---------------------------------------------------------
+      # End-to-end toolchain smoke tests on both platforms.
+      # These catch path, runtime, dependency and CLI problems before PyInstaller.
+      # ---------------------------------------------------------
+
+      - name: Test Windows Yosys to Netlistsvg Pipeline
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $suite = Join-Path $env:GITHUB_WORKSPACE 'bin\windows'
+          $toolDir = Join-Path $suite 'bin'
+          $source = Join-Path $env:RUNNER_TEMP 'rtlparser_smoke.v'
+          $json = Join-Path $env:RUNNER_TEMP 'rtlparser_smoke.json'
+          $svg = Join-Path $env:RUNNER_TEMP 'rtlparser_smoke.svg'
+          $entry = Join-Path $toolDir 'netlistsvg\node_modules\netlistsvg\bin\netlistsvg.js'
+
+          @'
+          module rtlparser_smoke(input a, input b, output y);
+            assign y = a & b;
+          endmodule
+          '@ | Set-Content -LiteralPath $source -Encoding ascii
+
+          . (Join-Path $suite 'environment.ps1')
+
+          $sourceArg = $source.Replace('\', '/')
+          $jsonArg = $json.Replace('\', '/')
+          $yosysScript = "read_verilog -sv `"$sourceArg`"; hierarchy -auto-top; proc; opt; write_json `"$jsonArg`""
+
+          & (Join-Path $toolDir 'yosys.exe') -p $yosysScript
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $json)) {
+            throw 'Windows Yosys smoke test failed.'
+          }
+
+          & (Join-Path $toolDir 'node.exe') $entry $json -o $svg
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $svg) -or (Get-Item $svg).Length -eq 0) {
+            throw 'Windows Netlistsvg smoke test failed.'
+          }
+
+          Write-Host "Windows RTL toolchain smoke test passed: $svg"
+
+      - name: Test Linux Yosys to Netlistsvg Pipeline
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SUITE="$GITHUB_WORKSPACE/bin/linux"
+          TOOL_DIR="$SUITE/bin"
+          SOURCE="$RUNNER_TEMP/rtlparser_smoke.v"
+          JSON="$RUNNER_TEMP/rtlparser_smoke.json"
+          SVG="$RUNNER_TEMP/rtlparser_smoke.svg"
+          ENTRY="$TOOL_DIR/netlistsvg/node_modules/netlistsvg/bin/netlistsvg.js"
+
+          cat > "$SOURCE" <<'VERILOG'
+          module rtlparser_smoke(input a, input b, output y);
+            assign y = a & b;
+          endmodule
+          VERILOG
+
+          source "$SUITE/environment"
+
+          YOSYS_SCRIPT="read_verilog -sv \"$SOURCE\"; hierarchy -auto-top; proc; opt; write_json \"$JSON\""
+          "$TOOL_DIR/yosys" -p "$YOSYS_SCRIPT"
+          test -s "$JSON"
+
+          "$TOOL_DIR/node" "$ENTRY" "$JSON" -o "$SVG"
+          test -s "$SVG"
+
+          echo "Linux RTL toolchain smoke test passed: $SVG"
+
+      # ---------------------------------------------------------
+      # PYTHON / QT DEPENDENCIES
+      # ---------------------------------------------------------
+
+      - name: Install Linux System Dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip libxcb-xinerama0
+          sudo apt-get install -y \
+            zip \
+            libxcb-xinerama0 \
+            libxkbcommon-x11-0 \
+            libegl1 \
+            libgl1
 
       - name: Install Python Dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install PyQt5 PyQtWebEngine requests pyinstaller pyverilog Pillow
+          python -m pip install PyQt5 PyQtWebEngine requests pyinstaller pyverilog Pillow
+
+      # ---------------------------------------------------------
+      # WINDOWS BUILD
+      # ---------------------------------------------------------
 
       - name: Build Windows Packages
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+
           python -c "from PIL import Image; Image.open('assets/icon.png').save('assets/icon.ico')"
-          
-          # Build Installer
-          pyinstaller --noconfirm --onefile --windowed --icon="assets\icon.ico" --name "Installer" launcher.py
-          
-          # Build Core Sandbox
-          pyinstaller --noconfirm --onedir --windowed --icon="assets\icon.ico" --name "Sandbox" --hidden-import=PyQt5.QtWebEngineWidgets --hidden-import=PyQt5.QtWebEngineCore --hidden-import=PyQt5.QtNetwork --collect-data pyverilog --copy-metadata pyverilog --exclude-module PyQt5.QtSql --exclude-module PyQt5.QtBluetooth --exclude-module PyQt5.QtMultimedia --exclude-module PyQt5.QtSensors --exclude-module PyQt5.QtTest --exclude-module PyQt5.QtXml --add-data "examples;examples" --add-data "bin;bin" --add-data "assets;assets" src\main.py
-          
-          # Compress Sandbox direct contents into zip
-          Compress-Archive -Path "dist\Sandbox\*" -DestinationPath "${{ matrix.sandbox_zip }}" -Force
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create Windows icon.' }
+
+          # Installer
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --icon="assets\icon.ico" `
+            --name "Installer" `
+            launcher.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer build failed.' }
+
+          # Main application, including the complete platform toolchain.
+          pyinstaller --noconfirm --clean --onedir --windowed `
+            --icon="assets\icon.ico" `
+            --name "Sandbox" `
+            --hidden-import=PyQt5.QtWebEngineWidgets `
+            --hidden-import=PyQt5.QtWebEngineCore `
+            --hidden-import=PyQt5.QtNetwork `
+            --collect-data pyverilog `
+            --copy-metadata pyverilog `
+            --exclude-module PyQt5.QtSql `
+            --exclude-module PyQt5.QtBluetooth `
+            --exclude-module PyQt5.QtMultimedia `
+            --exclude-module PyQt5.QtSensors `
+            --exclude-module PyQt5.QtTest `
+            --exclude-module PyQt5.QtXml `
+            --add-data "examples;examples" `
+            --add-data "bin;bin" `
+            --add-data "assets;assets" `
+            src\main.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Sandbox build failed.' }
+
+          Compress-Archive `
+            -Path 'dist\Sandbox\*' `
+            -DestinationPath '${{ matrix.sandbox_zip }}' `
+            -Force
+
+      # ---------------------------------------------------------
+      # LINUX BUILD
+      # ---------------------------------------------------------
 
       - name: Build Linux Packages
-        if: matrix.os == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
+        shell: bash
         run: |
-          # Build Installer
-          pyinstaller --noconfirm --onefile --windowed --icon="assets/icon.png" --name "Installer" launcher.py
-          
-          # Build Core Sandbox
-          pyinstaller --noconfirm --onedir --name "Sandbox" --hidden-import=pkgutil --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtWidgets --hidden-import=PyQt5.QtWebEngineWidgets --hidden-import=PyQt5.QtWebEngineCore --hidden-import=PyQt5.QtNetwork --collect-data pyverilog --copy-metadata pyverilog --exclude-module PyQt5.QtSql --exclude-module PyQt5.QtBluetooth --exclude-module PyQt5.QtMultimedia --exclude-module PyQt5.QtSensors --exclude-module PyQt5.QtTest --exclude-module PyQt5.QtXml --add-data "examples:examples" --add-data "bin:bin" --add-data "assets:assets" src/main.py
-          
-          # Make binaries executable inside build
-          find dist/Sandbox -type f \( -name "Sandbox" -o -name "iverilog" -o -name "vvp" -o -name "ivl" -o -name "ivlpp" \) -exec chmod +x {} +
-          
-          # Compress Sandbox direct contents into zip
+          set -euo pipefail
+
+          # Installer
+          pyinstaller --noconfirm --clean --onefile \
+            --name Installer \
+            launcher.py
+
+          # Main application, including the complete platform toolchain.
+          pyinstaller --noconfirm --clean --onedir \
+            --name Sandbox \
+            --hidden-import=pkgutil \
+            --hidden-import=PyQt5.QtCore \
+            --hidden-import=PyQt5.QtWidgets \
+            --hidden-import=PyQt5.QtWebEngineWidgets \
+            --hidden-import=PyQt5.QtWebEngineCore \
+            --hidden-import=PyQt5.QtNetwork \
+            --collect-data pyverilog \
+            --copy-metadata pyverilog \
+            --exclude-module PyQt5.QtSql \
+            --exclude-module PyQt5.QtBluetooth \
+            --exclude-module PyQt5.QtMultimedia \
+            --exclude-module PyQt5.QtSensors \
+            --exclude-module PyQt5.QtTest \
+            --exclude-module PyQt5.QtXml \
+            --add-data 'examples:examples' \
+            --add-data 'bin:bin' \
+            --add-data 'assets:assets' \
+            src/main.py
+
+          # PyInstaller may store --add-data files without executable bits.
+          # Restore execute permission throughout the bundled Linux tool bin.
+          if [[ -d dist/Sandbox/bin/linux/bin ]]; then
+            find dist/Sandbox/bin/linux/bin -type f -exec chmod u+x {} +
+          else
+            echo 'Bundled Linux tool directory is missing from the PyInstaller output.' >&2
+            exit 1
+          fi
+
           cd dist/Sandbox
-          zip -r ../../${{ matrix.sandbox_zip }} .
+          zip -r "../../${{ matrix.sandbox_zip }}" .
           cd ../..
+
+      # ---------------------------------------------------------
+      # RELEASE ASSETS
+      # ---------------------------------------------------------
 
       - name: Upload Binaries to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -108,3 +463,4 @@ jobs:
           files: |
             dist/${{ matrix.installer_bin }}
             ${{ matrix.sandbox_zip }}
+          fail_on_unmatched_files: true
