@@ -23,7 +23,8 @@ class SimulationEngine(QObject):
         self.verilog_signals = []
         self.ui_signals = []
         self.stdout_buffer = ""
-        self._is_compiling = False  # Engine lock to prevent double-triggering
+        self._is_compiling = False
+        self.memory_updates = {}
 
         if getattr(sys, 'frozen', False):
             root_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
@@ -44,13 +45,12 @@ class SimulationEngine(QObject):
                     st = os.stat(binary)
                     os.chmod(binary, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
-        print(f"[DEBUG] Resolved iverilog path: {self.iverilog_path}")
-
     def cleanup_previous_process(self):
         if self.process.state() != QProcess.NotRunning:
             self.process.kill()
             self.process.waitForFinished(1000)
         self.stdout_buffer = ""
+        self.memory_updates.clear()
 
     def parse_verilog_content(self, verilog_code):
         clean_code = re.sub(r'//.*', '', verilog_code)
@@ -72,6 +72,14 @@ class SimulationEngine(QObject):
             "outputs": outputs,
             "internals": internals
         }
+
+    def _find_matching_signal(self, all_sigs, candidates):
+        """Case-insensitive search for memory control signals."""
+        sig_map = {s.lower(): s for s in all_sigs}
+        for cand in candidates:
+            if cand.lower() in sig_map:
+                return sig_map[cand.lower()]
+        return None
 
     def generate_embedded_testbench(self, parsed, verilog_code):
         tb = "// Auto-generated Dynamic Testbench\n"
@@ -96,6 +104,26 @@ class SimulationEngine(QObject):
         
         tb += "    integer cmd_id;\n"
         tb += "    integer cmd_val;\n\n"
+
+        # --- Flexible Memory Spy Injection ---
+        all_sigs = parsed['inputs'] + parsed['outputs'] + parsed['internals']
+        clk_sig = self._find_matching_signal(parsed['inputs'], ['clk', 'clock'])
+        we_sig = self._find_matching_signal(all_sigs, ['we', 'write_en', 'wen', 'write', 'w_en'])
+        addr_sig = self._find_matching_signal(all_sigs, ['addr', 'address', 'radr', 'wadr'])
+        wdata_sig = self._find_matching_signal(all_sigs, ['wdata', 'data_in', 'din', 'data', 'writedata'])
+
+        if clk_sig and we_sig and addr_sig and wdata_sig:
+            def get_sig_path(sig):
+                return f"dut.{sig}" if sig in parsed['internals'] else sig
+
+            tb += "    // Embedded UI Memory Controller Spy\n"
+            tb += f"    always @(posedge {get_sig_path(clk_sig)}) begin\n"
+            tb += "        #1;\n"  # Settling delay after clock edge ensures proper signal reads
+            tb += f"        if ({get_sig_path(we_sig)}) begin\n"
+            tb += f"            $display(\"MEM_WRITE:%0d:%0d\", {get_sig_path(addr_sig)}, {get_sig_path(wdata_sig)});\n"
+            tb += "            $fflush(32'h8000_0001);\n"
+            tb += "        end\n"
+            tb += "    end\n\n"
         
         tb += "    initial begin\n"
         if 'clk' in parsed['inputs']:
@@ -135,10 +163,7 @@ class SimulationEngine(QObject):
             f.write(tb)
 
     def compile_and_run(self, file_path):
-        """Fallback wrapper for main.py to prevent AttributeErrors."""
         verilog_code = ""
-        
-        # Robust read loop to handle OneDrive file locks
         for attempt in range(15):
             if os.path.exists(file_path):
                 try:
@@ -155,11 +180,9 @@ class SimulationEngine(QObject):
             self.log_message.emit(f"Engine Error: Could not read {file_path} or file is empty.", "ERROR")
             return
             
-        # Pass the successfully read string to the new compiler
         self.compile_verilog_string(verilog_code)
     
     def compile_verilog_string(self, verilog_code):
-        # 1. Debounce rapid double-triggers from the UI
         if getattr(self, '_is_compiling', False):
             return
         self._is_compiling = True
@@ -167,7 +190,6 @@ class SimulationEngine(QObject):
         try:
             self.cleanup_previous_process()
 
-            # 2. Immediately check if we have valid code from memory
             if not verilog_code or not verilog_code.strip():
                 self.log_message.emit("Canvas is empty. No hardware logic generated to compile.", "WARN")
                 return
@@ -175,12 +197,10 @@ class SimulationEngine(QObject):
             parsed = self.parse_verilog_content(verilog_code)
             self.parsed_design.emit(parsed)
             
-            # generate_embedded_testbench handles writing the string to auto_sandbox_tb.v
             self.generate_embedded_testbench(parsed, verilog_code)
             
             self.log_message.emit(f"Parsed and prepared inline harness for module: '{parsed['module_name']}'", "INFO")
             
-            # 3. Synchronous compilation pass using the generated local file
             compile_proc = QProcess()
             compile_proc.start(self.iverilog_path, ["-g2012", "-o", "sim_build.vvp", "auto_sandbox_tb.v"])
             compile_proc.waitForFinished(5000)
@@ -190,7 +210,6 @@ class SimulationEngine(QObject):
                 self.log_message.emit(f"Compilation Error:\n{err}", "ERROR")
                 return
                 
-            # 4. Launch simulation backend
             self.process.start(self.vvp_path, ["sim_build.vvp"])
 
         finally:
@@ -215,6 +234,23 @@ class SimulationEngine(QObject):
             
             if line == "TESTBENCH_READY":
                 self.log_message.emit("Simulation Engine active. Hardware synced.", "SUCCESS")
+                # Fix 1: Zero-initialize BOTH 64-byte RAM and 128-byte ROM maps immediately on startup
+                self.hardware_updated.emit({
+                    'ram': {i: 0 for i in range(64)},
+                    'rom': {i: 0 for i in range(128)}
+                })
+
+            elif line.startswith("MEM_WRITE:"):
+                parts = line.split(':')
+                try:
+                    addr = int(parts[1].strip())
+                    val = int(parts[2].strip())
+                    self.memory_updates[addr] = val
+                    # Fix 2: Emit a debug message so you visibly see intercepted writes in the console
+                    # self.log_message.emit(f"Spy Intercepted Write: Addr 0x{addr:04X} = 0x{val:02X}", "INFO")
+                except ValueError:
+                    pass
+                    
             elif line.startswith("UPDATE:"):
                 parts = line.split(':')[1:]
                 state_dict = {}
@@ -228,6 +264,22 @@ class SimulationEngine(QObject):
                         state_dict[sig] = val
                         if not sig.startswith("dut."):
                             state_dict[f"dut.{sig}"] = val 
+                            
+                # Fix 3: Safely route memory updates to RAM or ROM based on the absolute address
+                if self.memory_updates:
+                    ram_up = {}
+                    rom_up = {}
+                    for a, v in self.memory_updates.items():
+                        if 0 <= a < 64:
+                            ram_up[a] = v
+                        elif 512 <= a < 512 + 128:  # 0x0200 = 512 (ROM start address)
+                            rom_up[a - 512] = v     # Adjust to relative ROM offset for the UI
+                        else:
+                            ram_up[a] = v           # Fallback
+                            
+                    if ram_up: state_dict['ram'] = ram_up
+                    if rom_up: state_dict['rom'] = rom_up
+                    self.memory_updates.clear()
                             
                 self.hardware_updated.emit(state_dict)
             else:

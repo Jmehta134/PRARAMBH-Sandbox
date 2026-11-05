@@ -19,13 +19,17 @@ from gauge import GaugeADCView
 from mouse_dir import MouseDirectionView
 from string_input import StringInputView
 from memory_region import MemoryRegionView
-from block_builder import VisualBlockBuilder
+from reset_serial_in import ResetSerialInView
 from console_log import ConsoleLogView
+
+# Import the Native RTL Viewer Pane & Netlist Generator
+from rtl_viewer import RTLViewerPane
+from rtl_parser import generate_rtl_svg
 
 # Import the Dynamic Simulation Backend Engine
 from sim_engine import SimulationEngine
 
-# 1. Resolve local iverilog binary path based on platform
+# 1. Resolve local binary paths based on platform
 base_dir = os.path.dirname(os.path.abspath(__file__))
 if sys.platform.startswith('win'):
     local_bin = os.path.join(base_dir, "bin", "windows", "bin")
@@ -34,15 +38,13 @@ else:
     local_bin = os.path.join(base_dir, "bin", "linux", "bin")
     iverilog_path = os.path.join(local_bin, "iverilog")
 
-# 2. Add to PATH and set specific environment variables PyVerilog uses
 if os.path.exists(local_bin) and local_bin not in os.environ["PATH"]:
     os.environ["PATH"] = local_bin + os.pathsep + os.environ["PATH"]
 
-# Some versions of PyVerilog/iverilog look for explicit compiler flags or environment variables
 os.environ["IVERILOG_PATH"] = iverilog_path
 
 # =============================================================================
-# GLOBAL STYLING (Professional Dark Grey Theme)
+# GLOBAL STYLING
 # =============================================================================
 STYLE_SHEET = """
 QMainWindow {
@@ -79,7 +81,6 @@ QPushButton:pressed {
     background-color: #CCE4F7;
     border: 1px solid #005499;
 }
-/* Pane's help button */
 QPushButton#HelpBtn {
     background-color: #EFEFEF;
     border: 2px solid #ADADAD;
@@ -109,7 +110,6 @@ QPushButton#FileBtn {
 QPushButton#FileBtn:hover {
     background-color: #1084D0;
 }
-/* Top help button*/
 QPushButton#GlobalHelpBtn {
     background-color: #FADBD8;
     border: 3px solid #D98880;
@@ -179,7 +179,6 @@ QPushButton#ExampleBtn:hover {
     border: 1px solid #0078D7;
     color: #0078D7;
 }
-/* Example Selector Dialog */
 QDialog {
     background-color: #F0F0F0;
 }
@@ -224,7 +223,6 @@ QPushButton#DialogLoadBtn {
 QPushButton#DialogLoadBtn:hover {
     background-color: #1084D0;
 }
-/* Pane Title Header Dropdown */
 QComboBox#PaneTitleDropdown {
     font-family: 'Segoe UI', sans-serif;
     font-weight: 900; 
@@ -253,7 +251,6 @@ QComboBox#PaneTitleDropdown QAbstractItemView {
     padding: 4px;
     outline: none;
 }
-/* Compile Play Button */
 QPushButton#CompilePlayBtn {
     background-color: #28A745;
     color: white;
@@ -270,7 +267,7 @@ QPushButton#CompilePlayBtn:hover {
 QPushButton#CompilePlayBtn:pressed {
     background-color: #1e7e34;
     border: 1px solid #1c7430;
-    padding-top: 2px; /* slight indent on click */
+    padding-top: 2px;
     padding-left: 2px;
 }
 """
@@ -337,12 +334,12 @@ class VerticalTabButton(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         if self.is_active:
-            painter.fillRect(self.rect(), QColor("#FFFFFF")) # Active tab matches light panel
+            painter.fillRect(self.rect(), QColor("#FFFFFF"))
             text_color = QColor("#005A9E") 
         else:
-            painter.fillRect(self.rect(), QColor("#D5D5D5")) # Light grey inactive tab background
+            painter.fillRect(self.rect(), QColor("#D5D5D5"))
             text_color = QColor("#555555") 
-            painter.setPen(QPen(QColor("#B0B0B0"), 2)) # Border separator
+            painter.setPen(QPen(QColor("#B0B0B0"), 2))
             painter.drawLine(self.width()-1, 0, self.width()-1, self.height())
 
         painter.save()
@@ -367,20 +364,19 @@ class VerticalTabBar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Ensures the empty space below tabs matches the inactive tab color
         self.setStyleSheet("background-color: #D5D5D5;")
 
-        self.btn_builder = VerticalTabButton("VISUAL BUILDER", 0, self)
+        self.btn_rtl = VerticalTabButton("RTL SCHEMATIC", 0, self)
         self.btn_sandbox = VerticalTabButton("HARDWARE SANDBOX", 1, self)
 
-        self.btn_builder.setFixedHeight(240)
+        self.btn_rtl.setFixedHeight(240)
         self.btn_sandbox.setFixedHeight(240)
 
-        layout.addWidget(self.btn_builder)
+        layout.addWidget(self.btn_rtl)
         layout.addWidget(self.btn_sandbox)
         layout.addStretch()
 
-        self.buttons = [self.btn_builder, self.btn_sandbox]
+        self.buttons = [self.btn_rtl, self.btn_sandbox]
         self.select_tab(0)
 
     def select_tab(self, index):
@@ -481,7 +477,8 @@ class SandboxPane(QFrame):
             "Gauge ADC Out",         
             "Mouse dir In",          
             "String In",             
-            "Memory Region",         
+            "Memory Region",
+            "Reset & Serial In",         
             "Console Log"            
         ])
         self.tool_selector.currentIndexChanged.connect(self.switch_tool)
@@ -531,6 +528,9 @@ class SandboxPane(QFrame):
         self.memory_region = MemoryRegionView()
         self.stack.addWidget(self.memory_region)
 
+        self.reset_serial_in = ResetSerialInView()
+        self.stack.addWidget(self.reset_serial_in)
+
         self.console_log = ConsoleLogView()
         self.stack.addWidget(self.console_log)
 
@@ -551,7 +551,7 @@ class SandboxPane(QFrame):
 class UnifiedSandboxIDE(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("µP Verilog Sandbox & Visual Builder")
+        self.setWindowTitle("µP Verilog Sandbox & RTL Schematic")
         self.resize(1360, 850)
         self.setStyleSheet(STYLE_SHEET)
         
@@ -563,7 +563,7 @@ class UnifiedSandboxIDE(QMainWindow):
         self.engine.hardware_updated.connect(self.sync_hardware_to_ui)
         
         self.clock_timer = QTimer()
-        self.clock_timer.timeout.connect(lambda: self.engine.send_command('clk', 1))
+        self.clock_timer.timeout.connect(self.trigger_clock_pulse)
         
         self.setup_ui()
 
@@ -577,9 +577,15 @@ class UnifiedSandboxIDE(QMainWindow):
         self.right_pane.string_input.string_updated.connect(self.engine.send_command)
         self.left_pane.keypad.keypad_triggered.connect(self.engine.send_command)
         self.right_pane.keypad.keypad_triggered.connect(self.engine.send_command)
+
+        self.left_pane.reset_serial_in.serial_updated.connect(self.engine.send_command)
+        self.right_pane.reset_serial_in.serial_updated.connect(self.engine.send_command)
+        self.left_pane.reset_serial_in.reset_triggered.connect(self.engine.send_command)
+        self.right_pane.reset_serial_in.reset_triggered.connect(self.engine.send_command)
+
         self.left_pane.mouse_sensor.mouse_updated.connect(self.engine.send_command)
         self.right_pane.mouse_sensor.mouse_updated.connect(self.engine.send_command)
-        self.btn_pulse.clicked.connect(lambda: self.engine.send_command('clk', 1))
+        self.btn_pulse.clicked.connect(self.trigger_clock_pulse)
 
     def broadcast_log(self, message, level="INFO"):
         self.left_pane.console_log.log_message(message, level)
@@ -589,25 +595,12 @@ class UnifiedSandboxIDE(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        main_h_layout = QHBoxLayout(central_widget)
-        main_h_layout.setContentsMargins(0, 0, 0, 0)
-        main_h_layout.setSpacing(0)
+        # Main Vertical Layout: Top Constant Header + Bottom Body Area
+        main_v_layout = QVBoxLayout(central_widget)
+        main_v_layout.setContentsMargins(0, 0, 0, 0)
+        main_v_layout.setSpacing(0)
 
-        # 1. MAIN APPS STACK
-        self.app_stack = QStackedWidget()
-
-        # --- PAGE 0: Full Visual Block Builder ---
-        self.full_block_builder = VisualBlockBuilder()
-        self.full_block_builder.file_changed.connect(self.on_builder_file_saved)
-        self.app_stack.addWidget(self.full_block_builder)
-
-        # --- PAGE 1: Hardware Sandbox Split Workspace ---
-        sandbox_container = QWidget()
-        sandbox_layout = QVBoxLayout(sandbox_container)
-        sandbox_layout.setContentsMargins(0, 0, 0, 0)
-        sandbox_layout.setSpacing(0)
-        
-        # A. GLOBAL HEADER
+        # 1. CONSTANT GLOBAL TOP HEADER BAR (Full Width)
         header = QFrame()
         header.setObjectName("HeaderFrame")
         header.setFixedHeight(70)
@@ -687,43 +680,73 @@ class UnifiedSandboxIDE(QMainWindow):
         self.btn_help_link.clicked.connect(self.open_help_webpage)
         header_layout.addWidget(self.btn_help_link)
 
-        sandbox_layout.addWidget(header)
+        main_v_layout.addWidget(header)
 
-        # B. SPLIT WORKSPACE
-        workspace_container = QWidget()
-        workspace_layout = QVBoxLayout(workspace_container)
-        workspace_layout.setContentsMargins(15, 15, 15, 15)
+        # 2. BODY AREA (Horizontal Layout below top header bar)
+        body_container = QWidget()
+        body_h_layout = QHBoxLayout(body_container)
+        body_h_layout.setContentsMargins(0, 0, 0, 0)
+        body_h_layout.setSpacing(0)
+
+        # MAIN APPS STACK
+        self.app_stack = QStackedWidget()
+
+        # --- PAGE 0: Full RTL Schematic Viewer ---
+        self.rtl_viewer = RTLViewerPane()
+        self.app_stack.addWidget(self.rtl_viewer)
+
+        # --- PAGE 1: Hardware Sandbox Split Workspace ---
+        sandbox_container = QWidget()
+        sandbox_layout = QVBoxLayout(sandbox_container)
+        sandbox_layout.setContentsMargins(15, 15, 15, 15)
+        sandbox_layout.setSpacing(0)
         
         self.splitter = QSplitter(Qt.Horizontal)
-        
         self.left_pane = SandboxPane()
         self.right_pane = SandboxPane()
         
-        self.left_pane.tool_selector.setCurrentIndex(11) # Default panes
-        self.right_pane.tool_selector.setCurrentIndex(0)
+        self.left_pane.tool_selector.setCurrentIndex(11) # Default: Console Log
+        self.right_pane.tool_selector.setCurrentIndex(0)  # Default: Empty Workspace
         
         self.splitter.addWidget(self.left_pane)
         self.splitter.addWidget(self.right_pane)
         self.splitter.setSizes([640, 640])
         
-        workspace_layout.addWidget(self.splitter)
-        sandbox_layout.addWidget(workspace_container, 1) 
-        
+        sandbox_layout.addWidget(self.splitter)
         self.app_stack.addWidget(sandbox_container)
 
-        # 2. SIDEWAYS VERTICAL NAVIGATION BAR
+        # SIDEWAYS VERTICAL NAVIGATION BAR (Starts after constant top bar)
         self.nav_bar = VerticalTabBar(self.app_stack)
 
-        main_h_layout.addWidget(self.nav_bar)
-        main_h_layout.addWidget(self.app_stack, 1)
+        body_h_layout.addWidget(self.nav_bar)
+        body_h_layout.addWidget(self.app_stack, 1)
 
-    # --- BIDIRECTIONAL FILE SYNC HANDLERS ---
-    def on_builder_file_saved(self, file_path):
-        self.target_verilog_file = file_path
-        filename = os.path.basename(file_path)
-        self.lbl_file.setText(f"Target: {filename}")
-        self.lbl_file.setStyleSheet("color: #333333; font-family: monospace; font-weight: bold;")
-        self.engine.compile_and_run(file_path)
+        main_v_layout.addWidget(body_container, 1)
+
+    # --- RTL SCHEMATIC GENERATION & SIMULATION HANDLERS ---
+    def update_rtl_schematic(self, file_path):
+        """Compiles target Verilog into an RTL SVG schematic via Yosys/netlistsvg."""
+        if not file_path or not os.path.exists(file_path):
+            return
+
+        try:
+            with open(file_path, 'r') as f:
+                verilog_code = f.read()
+
+            output_svg = os.path.join(base_dir, "temp_rtl.svg")
+            result = generate_rtl_svg(verilog_code, output_svg)
+
+            # Pass either valid file path or error string directly to viewer
+            self.rtl_viewer.load_rtl_svg(result)
+
+            if result.startswith("RTL_ERROR:"):
+                self.broadcast_log(f"RTL Generation Failed: {result}", "WARNING")
+            else:
+                self.broadcast_log(f"RTL Schematic updated for {os.path.basename(file_path)}", "INFO")
+        except Exception as e:
+            err_msg = f"RTL_ERROR: File read error for RTL rendering: {str(e)}"
+            self.broadcast_log(err_msg, "ERROR")
+            self.rtl_viewer.load_rtl_svg(err_msg)
 
     def select_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Verilog Target File", "", "Verilog Files (*.v)")
@@ -733,17 +756,13 @@ class UnifiedSandboxIDE(QMainWindow):
             self.lbl_file.setText(f"Target: {filename}")
             self.lbl_file.setStyleSheet("color: #333333; font-family: monospace; font-weight: bold;")
             
-            # Check for general parsing errors
-            build_status = self.full_block_builder.load_external_file(file_path)
-            if isinstance(build_status, str) and build_status.startswith("PARSE_ERROR:"):
-                error_msg = build_status.replace("PARSE_ERROR:", "").strip()
-                self.broadcast_log(f"Visual Canvas Skipped for {filename}: {error_msg}", "WARNING")
-                
-            # Always run the simulation engine regardless of visual canvas success
+            # Update RTL Schematic and run simulation
+            self.update_rtl_schematic(file_path)
             self.engine.compile_and_run(file_path)
 
     def recompile_current_file(self):
         if self.target_verilog_file:
+            self.update_rtl_schematic(self.target_verilog_file)
             self.engine.compile_and_run(self.target_verilog_file)
 
     def open_example_dialog(self):
@@ -756,13 +775,8 @@ class UnifiedSandboxIDE(QMainWindow):
             self.lbl_file.setText(f"Target: {filename}")
             self.lbl_file.setStyleSheet("color: #333333; font-family: monospace; font-weight: bold;")
             
-            # Check for general parsing errors
-            build_status = self.full_block_builder.load_external_file(dialog.selected_file_path)
-            if isinstance(build_status, str) and build_status.startswith("PARSE_ERROR:"):
-                error_msg = build_status.replace("PARSE_ERROR:", "").strip()
-                self.broadcast_log(f"Visual Canvas Skipped for {filename}: {error_msg}", "WARNING")
-                
-            # Always run the simulation engine regardless of visual canvas success
+            # Update RTL Schematic and run simulation
+            self.update_rtl_schematic(dialog.selected_file_path)
             self.engine.compile_and_run(dialog.selected_file_path)
 
     # --- ENGINE BINDINGS ---
@@ -871,19 +885,25 @@ class UnifiedSandboxIDE(QMainWindow):
         fallback = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
         os.makedirs(fallback, exist_ok=True)
         return fallback
+        
+    def trigger_clock_pulse(self):
+        """Sends clock pulse to engine and advances any active Reset & Serial In shifters."""
+        self.engine.send_command('clk', 1)
+        for pane in [self.left_pane, self.right_pane]:
+            current_widget = pane.stack.currentWidget()
+            if isinstance(current_widget, ResetSerialInView):
+                current_widget.clock_tick()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
     if getattr(sys, 'frozen', False):
-        # PyInstaller bundled path resolution
         base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
         icon_path = os.path.join(base_dir, "assets", "icon.png")
         if not os.path.exists(icon_path):
             icon_path = os.path.join(base_dir, "_internal", "assets", "icon.png")
     else:
-        # Standard Python script path resolution
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "icon.png")
         
     if os.path.exists(icon_path):

@@ -7,13 +7,12 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, pyqtSignal
 
 # =============================================================================
-# MAIN PANE: Dynamic ASCII String Input Interface (Expanded Workspace)
+# MAIN PANE: Dynamic ASCII String Input Interface
 # =============================================================================
 class StringInputView(QWidget):
     """
     Industrial ASCII String Injector Interface.
     Packs up to 16 ASCII characters into a wide Verilog input bus or string register.
-    Designed to fill the full width and height of the split workspace pane.
     """
     # Emits (target_port_name, integer_packed_value)
     string_updated = pyqtSignal(str, object)
@@ -21,51 +20,123 @@ class StringInputView(QWidget):
     def __init__(self):
         super().__init__()
         self.available_inputs = []
+        self.setObjectName("StringInputView")
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        self.setStyleSheet("""
+            QWidget#StringInputView {
+                background-color: #10141B;
+                color: #D6E0EE;
+                font-family: 'Segoe UI', sans-serif;
+            }
 
-        panel_frame = QFrame()
-        panel_frame.setStyleSheet("""
-            QFrame {
-                background-color: #1E1E1E;
-                border: 2px solid #CCCCCC;
-                border-radius: 10px;
+            QFrame#PanelFrame {
+                background-color: #171E29;
+                border: 1px solid #2B394B;
+                border-radius: 11px;
+            }
+
+            QLabel#TagLabel {
+                color: #8193AA;
+                font-family: 'Consolas', monospace;
+                font-size: 16px;
+                font-weight: bold;
+                letter-spacing: 1.5px;
+            }
+
+            QComboBox#PortCombo {
+                background-color: #0A1018;
+                color: #45F5A5;
+                border: 1px solid #29384A;
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-family: 'Consolas', monospace;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QComboBox#PortCombo:hover {
+                border: 1px solid #39DFA1;
+            }
+            QComboBox#PortCombo QAbstractItemView {
+                background-color: #0A1018;
+                color: #D6E0EE;
+                selection-background-color: #176B56;
+                selection-color: #FFFFFF;
+                border: 1px solid #29384A;
+                padding: 6px;
+                font-family: 'Consolas', monospace;
+                font-size: 15px;
+            }
+
+            QLineEdit#StringInput {
+                background-color: #0A1018;
+                color: #45F5A5;
+                border: 1px solid #29384A;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 22px;
+                font-weight: bold;
+                selection-background-color: #176B56;
+                selection-color: #FFFFFF;
+            }
+            QLineEdit#StringInput:focus {
+                border: 1px solid #39DFA1;
+                background-color: #0C171B;
+            }
+
+            QLabel#StatusLabel {
+                color: #8290A4;
+                font-family: 'Consolas', monospace;
+                font-size: 15px;
+                font-weight: bold;
+            }
+
+            QPushButton#UpdateButton {
+                background-color: #0078D7;
+                color: #FFFFFF;
+                border: 1px solid #005A9E;
+                border-bottom: 4px solid #003B66;
+                border-radius: 8px;
+                font-family: 'Segoe UI', sans-serif;
+                font-weight: 900;
+                font-size: 16px;
+                letter-spacing: 1.5px;
+            }
+            QPushButton#UpdateButton:hover {
+                background-color: #1084D0;
+                border-color: #0078D7;
+                border-bottom: 4px solid #005A9E;
+            }
+            QPushButton#UpdateButton:pressed {
+                background-color: #005A9E;
+                border-bottom: 1px solid #003B66;
+                padding-top: 3px;
             }
         """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 22)
+        layout.setSpacing(22)
+
+        # Top stretch for vertical centering
+        layout.addStretch(1)
+
+        panel_frame = QFrame()
+        panel_frame.setObjectName("PanelFrame")
         panel_layout = QVBoxLayout(panel_frame)
-        panel_layout.setContentsMargins(25, 25, 25, 25)
+        panel_layout.setContentsMargins(22, 22, 22, 22)
         panel_layout.setSpacing(20)
 
         # --- Target Input Port Selector ---
         port_layout = QHBoxLayout()
         lbl_port = QLabel("TARGET INPUT PORT:")
-        lbl_port.setStyleSheet("""
-            font-weight: 900; 
-            color: #00E5FF; 
-            font-size: 13px; 
-            letter-spacing: 1px; 
-            border: none; 
-            background: transparent;
-        """)
+        lbl_port.setObjectName("TagLabel")
         
         self.combo_target = QComboBox()
+        self.combo_target.setObjectName("PortCombo")
         self.combo_target.setMinimumWidth(220)
-        self.combo_target.setFixedHeight(38)
-        self.combo_target.setStyleSheet("""
-            QComboBox {
-                background-color: #2D2D30;
-                color: #00FFCC;
-                border: 1px solid #555555;
-                padding: 6px 12px;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                font-family: monospace;
-            }
-            QComboBox::drop-down { border: none; }
-        """)
+        self.combo_target.setFixedHeight(46)
+        self.combo_target.setMaxVisibleItems(15)
         
         port_layout.addWidget(lbl_port)
         port_layout.addStretch()
@@ -74,90 +145,37 @@ class StringInputView(QWidget):
 
         # --- ASCII String Input Field ---
         lbl_input = QLabel("ASCII PAYLOAD INPUT (UP TO 16 CHARACTERS):")
-        lbl_input.setStyleSheet("""
-            font-weight: 900; 
-            color: #AAAAAA; 
-            font-size: 12px; 
-            letter-spacing: 1px; 
-            border: none; 
-            background: transparent;
-        """)
+        lbl_input.setObjectName("TagLabel")
         panel_layout.addWidget(lbl_input)
 
         self.txt_input = QLineEdit()
+        self.txt_input.setObjectName("StringInput")
         self.txt_input.setPlaceholderText("Type string here (e.g. HELLO)...")
         self.txt_input.setMaxLength(16)
-        self.txt_input.setFixedHeight(55)
-        self.txt_input.setFont(QFont("Consolas", 18, QFont.Bold))
-        self.txt_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #101010;
-                color: #00FFCC;
-                border: 2px solid #333333;
-                border-radius: 6px;
-                padding: 10px 15px;
-                selection-background-color: #0078D7;
-            }
-            QLineEdit:focus {
-                border: 2px solid #00E5FF;
-            }
-        """)
+        self.txt_input.setFixedHeight(68)
         self.txt_input.textChanged.connect(self.update_status)
         panel_layout.addWidget(self.txt_input)
 
         # --- Live Byte & Bit Width Indicator ---
-        self.lbl_status = QLabel("0 / 16 Characters  |  0 Bits (Packed Hex: 0x00)")
+        self.lbl_status = QLabel("0 / 16 Characters  |  0 Bits  (Packed: 0x00)")
+        self.lbl_status.setObjectName("StatusLabel")
         self.lbl_status.setAlignment(Qt.AlignCenter)
-        self.lbl_status.setStyleSheet("""
-            color: #888888; 
-            font-family: monospace; 
-            font-size: 12px; 
-            font-weight: bold;
-            border: none; 
-            background: transparent;
-        """)
         panel_layout.addWidget(self.lbl_status)
 
         panel_layout.addSpacing(10)
 
-        # --- Expanded Kakkoii UPDATE / BLAST BUTTON ---
+        # --- UPDATE / BLAST BUTTON ---
         self.btn_update = QPushButton("UPDATE STRING REGISTER")
-        self.btn_update.setFixedHeight(55)
+        self.btn_update.setObjectName("UpdateButton")
+        self.btn_update.setFixedHeight(56)
         self.btn_update.setCursor(Qt.PointingHandCursor)
-        self.btn_update.setStyleSheet("""
-            QPushButton {
-                background-color: #0078D7;
-                color: #FFFFFF;
-                border: 2px solid #005A9E;
-                border-bottom: 5px solid #003B66;
-                border-radius: 6px;
-                font-weight: 900;
-                font-size: 14px;
-                letter-spacing: 1.5px;
-            }
-            QPushButton:hover {
-                background-color: #1084D0;
-                border-color: #0078D7;
-                border-bottom: 5px solid #005A9E;
-            }
-            QPushButton:pressed {
-                background-color: #005A9E;
-                border-bottom: 2px solid #003B66;
-                padding-top: 3px;
-            }
-        """)
         self.btn_update.clicked.connect(self.emit_string_data)
         panel_layout.addWidget(self.btn_update)
 
-        # Allow panel to consume full pane width
         layout.addWidget(panel_frame)
 
-        subtitle = QLabel("Inject raw ASCII strings directly into Verilog input buses")
-        subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setStyleSheet("color: #666666; font-size: 14px; font-style: italic; margin-bottom: 4px;")
-        layout.addWidget(subtitle)
-        
-        layout.addStretch()
+        # Bottom stretch for vertical centering
+        layout.addStretch(1)
 
     def set_available_inputs(self, inputs_list):
         """Populates detected input ports from main.py's Verilog parser."""
@@ -203,17 +221,18 @@ class StringInputView(QWidget):
         self.string_updated.emit(target_port, packed_val)
 
     def show_help(self):
-        msg = QMessageBox(self)
+        msg = QMessageBox()
         msg.setWindowTitle("Learner Guide: ASCII String Input Injector")
         msg.setText(
             "<b>ASCII String Input Injector</b><br><br>"
             "This interface converts plain text typed on your keyboard into packed ASCII bitvectors for Verilog simulation.<br><br>"
             "<b>How It Works:</b><br>"
-            "• Type any combination of standard keyboard ASCII characters into the input box.<br>"
-            "• Each character is converted to an 8-bit ASCII byte.<br>"
-            "• Clicking <b>UPDATE STRING REGISTER</b> packs all characters into a wide bitvector bus and blasts it to your target input pin.<br><br>"
-            "<b>Example Verilog Port:</b><br>"
-            "<code>input wire [127:0] string_in</code> (Can hold up to 16 ASCII characters!)"
+            "• Select the target input port from the dropdown menu.<br>"
+            "• Type any combination of standard ASCII characters (up to 16) into the payload box.<br>"
+            "• Each character is converted into an 8-bit ASCII byte.<br>"
+            "• Clicking <b>UPDATE STRING REGISTER</b> packs all characters into a wide bitvector bus and sends it to the target Verilog input pin.<br><br>"
+            "<b>Example Verilog Bus Declaration:</b><br>"
+            "<code>input wire [127:0] string_in</code> (Holds up to 16 ASCII characters)"
         )
         msg.exec_()
 
@@ -222,7 +241,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     test_window = QWidget()
-    test_window.setStyleSheet("background-color: #F0F0F0;")
+    test_window.setStyleSheet("background-color: #10141B;")
     layout = QVBoxLayout(test_window)
     module = StringInputView()
     layout.addWidget(module)
